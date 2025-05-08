@@ -141,7 +141,7 @@ export const useClaimToken = (initialEventId: string | undefined) => {
       toast({
         title: "Already Claimed",
         description: "You have already claimed a token for this event.",
-        variant: "warning",
+        variant: "destructive",
       });
       return;
     }
