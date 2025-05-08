@@ -7,6 +7,9 @@ export interface EventDetails {
   time: string;
   description: string;
   attendeeCount: number;
+  symbol: string;
+  decimals: number;
+  imageUrl: string;
 }
 
 // Compression result interface
@@ -16,4 +19,5 @@ export interface CompressionResult {
   merkleRoot?: string;
   qrCodeData?: string;
   mintAddress?: string;
+  transactionId?: string;
 }

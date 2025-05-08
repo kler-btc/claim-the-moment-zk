@@ -1,21 +1,29 @@
 
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Connection, Transaction } from '@solana/web3.js';
 import { toast } from '@/components/ui/use-toast';
 import { CompressionResult, EventDetails } from './types';
 import { getSolanaConnection, getLightRpc } from './compressionApi';
 import { createCompressedToken, claimCompressedToken } from './tokenServices';
+import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
 // Create a new compressed token for an event
 export const createEvent = async (
   eventDetails: EventDetails,
-  walletPublicKey: string
+  walletPublicKey: string,
+  connection: Connection,
+  signTransaction: SignerWalletAdapter['signTransaction']
 ): Promise<CompressionResult> => {
   console.log('Creating event with details:', eventDetails);
   console.log('Using wallet:', walletPublicKey);
 
   try {
-    // Create a compressed token for the event
-    const compressionResult = await createCompressedToken(eventDetails, walletPublicKey);
+    // Create a compressed token for the event - now with transaction signing
+    const compressionResult = await createCompressedToken(
+      eventDetails, 
+      walletPublicKey,
+      connection,
+      signTransaction
+    );
     
     // Store event metadata in local storage (for demo purposes)
     const eventDataKey = `event-${compressionResult.eventId}`;
@@ -25,9 +33,13 @@ export const createEvent = async (
       stateTreeAddress: compressionResult.merkleRoot,
       stateTreeIndex: 0, // For demonstration
       title: eventDetails.title,
+      symbol: eventDetails.symbol,
+      decimals: eventDetails.decimals,
+      imageUrl: eventDetails.imageUrl,
       tokenAmount: eventDetails.attendeeCount,
       creator: walletPublicKey,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      transactionId: compressionResult.transactionId
     }));
     
     toast({

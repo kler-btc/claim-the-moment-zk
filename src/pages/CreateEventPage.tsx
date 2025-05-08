@@ -12,6 +12,8 @@ const CreateEventPage = () => {
     isLoading, 
     qrCodeUrl, 
     mintAddress, 
+    eventId,
+    transactionId,
     handleInputChange, 
     handleCreateEvent, 
     downloadQRCode 
@@ -44,6 +46,8 @@ const CreateEventPage = () => {
           <QRCodeDisplay 
             qrCodeUrl={qrCodeUrl}
             mintAddress={mintAddress}
+            eventId={eventId}
+            transactionId={transactionId}
             onDownload={downloadQRCode}
           />
         </div>

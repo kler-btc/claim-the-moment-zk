@@ -1,170 +1,174 @@
-
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { claimEventToken, getEventDetails } from '@/utils/eventServices';
+import { useNavigate } from 'react-router-dom';
+import { toast } from '@/components/ui/use-toast';
+import { getEventDetails, claimEventToken } from '@/utils/eventServices';
 import { verifyTokenClaim } from '@/utils/compressionApi';
-import { useToast } from '@/hooks/use-toast';
 
-export const useClaimToken = (eventId: string | undefined) => {
+export const useClaimToken = (initialEventId: string | undefined) => {
   const { connected, publicKey } = useWallet();
-  const { toast } = useToast();
-  
+  const navigate = useNavigate();
+
   const [isScanning, setIsScanning] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [hasClaimed, setHasClaimed] = useState(false);
   const [eventData, setEventData] = useState<any>(null);
-  const [claimUrl, setClaimUrl] = useState<string | null>(null);
-  const [hasClaimed, setHasClaimed] = useState<boolean | null>(null);
   const [manualEntryMode, setManualEntryMode] = useState(false);
   const [manualEventId, setManualEventId] = useState('');
+  const [eventId, setEventId] = useState<string | undefined>(initialEventId);
+  const [scanError, setScanError] = useState<string | null>(null);
 
+  // Effect to fetch event data when eventId changes
   useEffect(() => {
     if (eventId) {
-      fetchEventDetails(eventId);
+      fetchEventData(eventId);
     }
   }, [eventId]);
 
+  // Effect to verify if the user has already claimed a token
   useEffect(() => {
-    if (eventId && connected && publicKey) {
-      checkIfClaimed();
-    }
-  }, [eventId, connected, publicKey]);
-
-  const fetchEventDetails = async (id: string) => {
-    try {
-      const parsedData = await getEventDetails(id);
-      
-      if (parsedData) {
-        setEventData({
-          title: parsedData.title,
-          organizer: parsedData.creator ? parsedData.creator.substring(0, 6) + '...' + parsedData.creator.substring(parsedData.creator.length - 4) : 'Unknown',
-          date: new Date(parsedData.createdAt).toLocaleDateString(),
-          location: 'Solana Devnet',
-          mintAddress: parsedData.mintAddress,
-          stateTreeAddress: parsedData.stateTreeAddress,
-        });
-      } else {
-        toast({
-          title: "Event Not Found",
-          description: "Could not find details for this event.",
-          variant: "destructive",
-        });
+    const checkTokenClaim = async () => {
+      if (connected && publicKey && eventId) {
+        try {
+          const hasAlreadyClaimed = await verifyTokenClaim(eventId, publicKey.toString());
+          setHasClaimed(hasAlreadyClaimed);
+        } catch (error) {
+          console.error('Error verifying token claim:', error);
+        }
       }
-    } catch (error) {
-      console.error("Error fetching event details:", error);
-      toast({
-        title: "Error Loading Event",
-        description: "Could not load event details. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+    };
 
-  const checkIfClaimed = async () => {
-    if (!eventId || !publicKey) return;
-    
+    checkTokenClaim();
+  }, [connected, publicKey, eventId]);
+
+  const fetchEventData = async (id: string) => {
     setIsVerifying(true);
     try {
-      const claimed = await verifyTokenClaim(
-        eventId, 
-        publicKey.toString()
-      );
-      setHasClaimed(claimed);
+      console.log('Fetching event data for ID:', id);
+      const data = await getEventDetails(id);
+      
+      if (!data) {
+        console.error('Event not found');
+        toast({
+          title: "Event Not Found",
+          description: "The event you're looking for doesn't exist or has been removed.",
+          variant: "destructive",
+        });
+        navigate('/claim');
+        return;
+      }
+      
+      console.log('Event data retrieved:', data);
+      setEventData(data);
     } catch (error) {
-      console.error("Error checking claim status:", error);
+      console.error('Error fetching event data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load event information. Please try again.",
+        variant: "destructive",
+      });
+      navigate('/claim');
     } finally {
       setIsVerifying(false);
     }
   };
 
-  const handleScan = (data: { text: string } | null) => {
+  const handleScan = (data: any) => {
+    // Clear previous errors
+    setScanError(null);
+    
     if (data && data.text) {
-      setIsScanning(false);
-      
       try {
-        // Try to parse the QR data as JSON first
-        try {
-          const jsonData = JSON.parse(data.text);
-          if (jsonData.eventId) {
-            window.location.href = `/claim/${jsonData.eventId}`;
-            return;
+        console.log('QR scan data received:', data.text);
+        
+        // Try to parse as URL first
+        let eventId;
+        if (data.text.includes('/claim/')) {
+          const url = new URL(data.text);
+          eventId = url.pathname.split('/claim/')[1];
+        } else {
+          // Try to parse as JSON
+          try {
+            const jsonData = JSON.parse(data.text);
+            eventId = jsonData.eventId;
+          } catch {
+            // If not valid JSON, use as-is if it appears to be an event ID
+            eventId = data.text;
           }
-        } catch (e) {
-          // Not JSON, continue with URL parsing
         }
         
-        // Parse as URL
-        try {
-          const url = new URL(data.text);
-          const pathParts = url.pathname.split('/');
-          if (pathParts.includes('claim') && pathParts.length > 2) {
-            const scannedEventId = pathParts[pathParts.indexOf('claim') + 1];
-            window.location.href = `/claim/${scannedEventId}`;
-          } else {
-            toast({
-              title: "Invalid QR Code",
-              description: "This QR code doesn't contain a valid claim link.",
-              variant: "destructive",
-            });
-          }
-        } catch (error) {
-          toast({
-            title: "Error Scanning QR",
-            description: "The QR code couldn't be processed. Please try again.",
-            variant: "destructive",
-          });
+        if (eventId) {
+          console.log('Event ID extracted:', eventId);
+          stopScanning();
+          navigate(`/claim/${eventId}`);
+        } else {
+          setScanError('Invalid QR code format. Please scan a valid event QR code.');
         }
       } catch (error) {
-        console.error("Error processing QR code:", error);
-        toast({
-          title: "Error Processing QR",
-          description: "Could not process the QR code data. Please try again.",
-          variant: "destructive",
-        });
+        console.error('Error processing QR data:', error);
+        setScanError('Could not process QR code data.');
       }
     }
   };
 
-  const handleError = (err: any) => {
-    console.error(err);
-    toast({
-      title: "Camera Error",
-      description: "There was an error accessing your camera. Please check permissions.",
-      variant: "destructive",
-    });
-    setIsScanning(false);
+  const handleError = (error: any) => {
+    console.error('QR scan error:', error);
+    
+    // Keep more user-friendly error messages
+    if (error.name === 'NotFoundError') {
+      setScanError('Camera not found or not accessible.');
+    } else if (error.name === 'NotAllowedError') {
+      setScanError('Camera access denied. Please check your browser settings.');
+    } else if (error.name === 'NotReadableError') {
+      setScanError('Camera is already in use by another application.');
+    } else {
+      setScanError(`Scanner error: ${error.message || 'Unknown error'}`);
+    }
   };
 
   const handleClaimToken = async () => {
     if (!connected || !publicKey || !eventId) {
       toast({
-        title: "Cannot Claim Token",
-        description: connected ? "Invalid event data." : "Please connect your wallet first.",
+        title: "Unable to Claim",
+        description: "Please connect your wallet first.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsClaiming(true);
+    if (hasClaimed) {
+      toast({
+        title: "Already Claimed",
+        description: "You have already claimed a token for this event.",
+        variant: "warning",
+      });
+      return;
+    }
 
+    setIsClaiming(true);
     try {
-      const success = await claimEventToken(
-        eventId,
-        publicKey.toString()
-      );
+      console.log('Claiming token for event:', eventId, 'to wallet:', publicKey.toString());
+      const success = await claimEventToken(eventId, publicKey.toString());
       
       if (success) {
-        toast({
-          title: "Token Claimed Successfully!",
-          description: "The compressed token has been added to your wallet.",
-        });
         setHasClaimed(true);
+        toast({
+          title: "Success!",
+          description: "You've successfully claimed a token for this event.",
+        });
+      } else {
+        toast({
+          title: "Claim Failed",
+          description: "Failed to claim token. Please try again later.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error("Error claiming token:", error);
+      console.error('Error claiming token:', error);
       toast({
-        title: "Error Claiming Token",
-        description: error instanceof Error ? error.message : "Something went wrong. Please try again.",
+        title: "Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred while claiming your token.",
         variant: "destructive",
       });
     } finally {
@@ -174,16 +178,18 @@ export const useClaimToken = (eventId: string | undefined) => {
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (manualEventId.trim()) {
-      window.location.href = `/claim/${manualEventId.trim()}`;
-    }
+    if (!manualEventId.trim()) return;
+    
+    navigate(`/claim/${manualEventId.trim()}`);
+    setManualEntryMode(false);
   };
 
   const toggleManualEntryMode = () => {
-    setManualEntryMode(prev => !prev);
+    setManualEntryMode(!manualEntryMode);
   };
 
   const startScanning = () => {
+    setScanError(null);
     setIsScanning(true);
   };
 
@@ -200,6 +206,8 @@ export const useClaimToken = (eventId: string | undefined) => {
     manualEntryMode,
     manualEventId,
     connected,
+    eventId,
+    scanError,
     handleScan,
     handleError,
     handleClaimToken,

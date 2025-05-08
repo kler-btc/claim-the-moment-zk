@@ -20,11 +20,25 @@ export const useCamera = (): CameraPermissionState => {
       
       // Check if the browser supports the MediaDevices API
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("Camera API not supported in this browser");
         throw new Error("Camera API is not supported in your browser");
       }
       
+      console.log("Requesting camera permission...");
+      
+      // Try to access the camera with explicit constraints for better compatibility
+      const constraints = { 
+        video: {
+          facingMode: 'environment', // Prefer back camera
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 }
+        }
+      };
+      
       // Try to access the camera
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      console.log("Camera permission granted:", stream.getVideoTracks()[0].label);
       
       // If successful, stop all tracks and return true
       stream.getTracks().forEach(track => track.stop());
@@ -33,6 +47,7 @@ export const useCamera = (): CameraPermissionState => {
       return true;
     } catch (err) {
       const permissionErr = err as Error;
+      console.error("Camera permission error:", permissionErr);
       setError(permissionErr);
       
       // Check if the error is due to denied permission
@@ -42,6 +57,15 @@ export const useCamera = (): CameraPermissionState => {
         toast({
           title: "Camera Access Denied",
           description: "Please allow camera access to scan QR codes",
+          variant: "destructive",
+        });
+      } else if (permissionErr.name === 'NotFoundError' || 
+                permissionErr.name === 'OverconstrainedError') {
+        // Camera not available or constraints not satisfiable
+        setHasPermission(false);
+        toast({
+          title: "Camera Not Available",
+          description: "No suitable camera found on your device",
           variant: "destructive",
         });
       } else {

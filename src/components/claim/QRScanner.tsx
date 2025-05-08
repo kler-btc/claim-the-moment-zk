@@ -1,9 +1,10 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Camera } from 'lucide-react';
 import QrReader from 'react-qr-scanner';
 import { useCamera } from '@/hooks/use-camera';
+import { useState, useEffect } from 'react';
 
 interface QRScannerProps {
   isScanning: boolean;
@@ -29,11 +30,37 @@ const QRScanner = ({
   onManualSubmit
 }: QRScannerProps) => {
   const { hasPermission, isLoading: cameraLoading, requestPermission } = useCamera();
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // Reset error when scanning state changes
+  useEffect(() => {
+    if (isScanning) {
+      setScanError(null);
+    }
+  }, [isScanning]);
 
   const startCameraWithPermission = async () => {
-    const hasAccess = await requestPermission();
-    if (hasAccess) {
-      onStartScanning();
+    try {
+      setScanError(null);
+      const hasAccess = await requestPermission();
+      if (hasAccess) {
+        onStartScanning();
+      }
+    } catch (error) {
+      setScanError(`Camera error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleScanError = (error: any) => {
+    setScanError(`Scan error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    onError(error);
+  };
+
+  // Custom scan handler with debugging
+  const handleScan = (data: any) => {
+    if (data) {
+      console.log("QR scan data received:", data);
+      onScan(data);
     }
   };
 
@@ -47,14 +74,27 @@ const QRScanner = ({
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
         {isScanning ? (
-          <div className="w-full max-w-[280px] h-[280px] overflow-hidden rounded-md">
+          <div className="w-full max-w-[280px] h-[280px] overflow-hidden rounded-md bg-black relative">
             <QrReader
               delay={300}
-              onError={onError}
-              onScan={onScan}
+              onError={handleScanError}
+              onScan={handleScan}
               style={{ width: '100%' }}
-              constraints={{ facingMode: 'environment' }}
+              constraints={{ 
+                facingMode: 'environment',
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 }
+              }}
+              className="absolute inset-0"
             />
+            {scanError && (
+              <div className="absolute inset-0 bg-black/70 flex items-center justify-center p-4">
+                <div className="text-white text-center space-y-2">
+                  <AlertCircle className="h-8 w-8 text-red-500 mx-auto" />
+                  <p className="text-sm">{scanError}</p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="w-full max-w-[280px] h-[280px] bg-muted rounded-md flex items-center justify-center text-center text-sm text-muted-foreground p-4">
@@ -66,7 +106,10 @@ const QRScanner = ({
                 <p>Camera permission denied. Please use manual entry instead.</p>
               </div>
             ) : (
-              <p>Click "Start Scanning" to activate your camera</p>
+              <div className="space-y-2">
+                <Camera className="h-12 w-12 text-primary/50 mx-auto" />
+                <p>Click "Start Scanning" to activate your camera</p>
+              </div>
             )}
           </div>
         )}
@@ -92,22 +135,35 @@ const QRScanner = ({
             </Button>
           </form>
         ) : (
-          <Button 
-            variant="outline" 
-            onClick={onToggleManual}
-            className="w-full"
-          >
-            Enter Event ID Manually
-          </Button>
+          <div className="w-full">
+            {scanError && (
+              <div className="text-red-500 text-sm mb-2 text-center">
+                {scanError}
+              </div>
+            )}
+            <Button 
+              variant="outline" 
+              onClick={onToggleManual}
+              className="w-full"
+            >
+              Enter Event ID Manually
+            </Button>
+          </div>
         )}
       </CardContent>
       <CardFooter>
         <Button
           onClick={startCameraWithPermission}
-          className={isScanning ? "bg-destructive hover:bg-destructive/90 w-full" : "solana-gradient-bg w-full"}
-          disabled={isScanning || hasPermission === false || manualEntryMode}
+          className={isScanning ? "bg-destructive hover:bg-destructive/90 w-full" : "bg-primary w-full"}
+          disabled={isScanning || hasPermission === false || manualEntryMode || cameraLoading}
         >
-          {isScanning ? "Stop Scanning" : "Start Scanning"}
+          {isScanning ? (
+            <>Stop Scanning</>
+          ) : cameraLoading ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading Camera...</>
+          ) : (
+            <>Start Scanning</>
+          )}
         </Button>
       </CardFooter>
     </Card>
