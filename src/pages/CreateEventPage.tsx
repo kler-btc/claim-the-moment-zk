@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { QRCodeSVG } from 'qrcode.react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createCompressedToken, EventDetails } from '@/utils/compressionUtils';
 
@@ -17,13 +18,14 @@ const CreateEventPage = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [mintAddress, setMintAddress] = useState<string | null>(null);
   const [eventDetails, setEventDetails] = useState<EventDetails>({
     title: '',
     location: '',
     date: '',
     time: '',
     description: '',
-    attendeeCount: 0,
+    attendeeCount: 50, // Default value
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -46,10 +48,24 @@ const CreateEventPage = () => {
       return;
     }
 
+    // Validate form
+    if (eventDetails.title.trim() === '' || 
+        eventDetails.location.trim() === '' || 
+        eventDetails.date.trim() === '' ||
+        eventDetails.time.trim() === '' ||
+        eventDetails.attendeeCount <= 0) {
+      toast({
+        title: "Invalid Event Details",
+        description: "Please fill in all required fields with valid information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Use the compression utility to create a compressed token
+      // Use the real ZK compression implementation
       const compressionResult = await createCompressedToken(
         eventDetails, 
         publicKey.toString()
@@ -58,16 +74,17 @@ const CreateEventPage = () => {
       // Generate the full claim URL with the host
       const claimUrl = `${window.location.origin}${compressionResult.claimUrl}`;
       setQrCodeUrl(claimUrl);
+      setMintAddress(compressionResult.mintAddress || null);
       
       toast({
         title: "Event created successfully!",
-        description: "Compressed token minted with ZK compression",
+        description: "Compressed token minted with ZK compression on Solana devnet.",
       });
     } catch (error) {
       console.error("Error creating event:", error);
       toast({
         title: "Error creating event",
-        description: "Failed to mint compressed token. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to mint compressed token. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -107,7 +124,7 @@ const CreateEventPage = () => {
       <div>
         <h1 className="text-3xl font-bold mb-2">Create Event</h1>
         <p className="text-muted-foreground">
-          Generate compressed tokens for your event attendees
+          Generate compressed tokens for your event attendees using Light Protocol's ZK compression
         </p>
       </div>
 
@@ -186,17 +203,21 @@ const CreateEventPage = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="attendeeCount">Number of Attendees</Label>
+                  <Label htmlFor="attendeeCount">Number of Attendees (Token Supply)</Label>
                   <Input
                     id="attendeeCount"
                     name="attendeeCount"
                     type="number"
                     min="1"
+                    max="1000"
                     placeholder="100"
                     value={eventDetails.attendeeCount || ''}
                     onChange={handleInputChange}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">
+                    This determines how many compressed tokens will be minted
+                  </p>
                 </div>
               
                 <Button 
@@ -204,7 +225,11 @@ const CreateEventPage = () => {
                   className="solana-gradient-bg w-full"
                   disabled={isLoading}
                 >
-                  {isLoading ? "Creating Compressed Token..." : "Create Event & Generate QR"}
+                  {isLoading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Compressed Token...</>
+                  ) : (
+                    "Create Event & Generate QR"
+                  )}
                 </Button>
               </form>
             </CardContent>
@@ -234,6 +259,13 @@ const CreateEventPage = () => {
                 )}
               </div>
             </CardContent>
+            {mintAddress && (
+              <div className="px-6 pb-2">
+                <p className="text-xs text-muted-foreground truncate">
+                  <span className="font-semibold">Token Mint:</span> {mintAddress}
+                </p>
+              </div>
+            )}
             <CardFooter>
               <Button 
                 onClick={downloadQRCode} 
@@ -241,7 +273,7 @@ const CreateEventPage = () => {
                 variant="outline"
                 className="w-full"
               >
-                Download QR Code
+                <Download className="mr-2 h-4 w-4" /> Download QR Code
               </Button>
             </CardFooter>
           </Card>
