@@ -17,9 +17,13 @@ export const getSolanaConnection = (): Connection => {
 
 // Create a Light Protocol RPC client
 export const getLightRpc = (): Rpc => {
-  // Note: We're simulating the creation of a Light Protocol RPC client
-  // In a production environment, you'd use the actual Light Protocol configuration
-  return new Rpc(HELIUS_RPC_URL);
+  // Creating an Rpc instance with required parameters
+  // The constructor expects: endpoint, commitment, and apiVersion
+  return new Rpc(
+    HELIUS_RPC_URL,   // endpoint
+    'confirmed',      // commitment
+    '1.0.0'           // apiVersion (use appropriate version)
+  );
 };
 
 // Simulate getting validity proof since getValidityProof is not available in Connection
