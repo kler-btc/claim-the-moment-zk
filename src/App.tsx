@@ -23,6 +23,7 @@ const App = () => (
           <PageLayout>
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/home" element={<HomePage />} />
               <Route path="/create" element={<CreateEventPage />} />
               <Route path="/claim" element={<ClaimPage />} />
               <Route path="/claim/:eventId" element={<ClaimPage />} />

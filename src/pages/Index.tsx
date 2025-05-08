@@ -1,8 +1,8 @@
 
-import HomePage from "./HomePage";
+import { Navigate } from "react-router-dom";
 
 const Index = () => {
-  return <HomePage />;
+  return <Navigate to="/home" replace />;
 };
 
 export default Index;

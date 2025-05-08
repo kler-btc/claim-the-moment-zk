@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { QRCodeSVG } from 'qrcode.react';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { createCompressedToken, EventDetails } from '@/utils/compressionUtils';
 
 const CreateEventPage = () => {
   const { connected, publicKey } = useWallet();
@@ -17,7 +17,7 @@ const CreateEventPage = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [eventDetails, setEventDetails] = useState({
+  const [eventDetails, setEventDetails] = useState<EventDetails>({
     title: '',
     location: '',
     date: '',
@@ -37,7 +37,7 @@ const CreateEventPage = () => {
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!connected) {
+    if (!connected || !publicKey) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to create an event",
@@ -49,26 +49,25 @@ const CreateEventPage = () => {
     setIsLoading(true);
 
     try {
-      // Mock implementation for now - will integrate with Light Protocol later
-      console.log("Creating event with details:", eventDetails);
+      // Use the compression utility to create a compressed token
+      const compressionResult = await createCompressedToken(
+        eventDetails, 
+        publicKey.toString()
+      );
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Generate a mock claim URL - this would be replaced with actual token data
-      const mockEventId = Math.random().toString(36).substring(2, 15);
-      const claimUrl = `${window.location.origin}/claim/${mockEventId}`;
+      // Generate the full claim URL with the host
+      const claimUrl = `${window.location.origin}${compressionResult.claimUrl}`;
       setQrCodeUrl(claimUrl);
       
       toast({
         title: "Event created successfully!",
-        description: "QR code has been generated for attendees",
+        description: "Compressed token minted with ZK compression",
       });
     } catch (error) {
       console.error("Error creating event:", error);
       toast({
         title: "Error creating event",
-        description: "Something went wrong. Please try again.",
+        description: "Failed to mint compressed token. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -118,7 +117,7 @@ const CreateEventPage = () => {
             <CardHeader>
               <CardTitle>Event Details</CardTitle>
               <CardDescription>
-                Fill in your event information to create tokens
+                Fill in your event information to create compressed tokens
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -205,7 +204,7 @@ const CreateEventPage = () => {
                   className="solana-gradient-bg w-full"
                   disabled={isLoading}
                 >
-                  {isLoading ? "Creating..." : "Create Event & Generate QR"}
+                  {isLoading ? "Creating Compressed Token..." : "Create Event & Generate QR"}
                 </Button>
               </form>
             </CardContent>
