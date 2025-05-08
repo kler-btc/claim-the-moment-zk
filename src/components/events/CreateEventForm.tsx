@@ -1,4 +1,5 @@
 
+import React, { useState } from 'react';
 import { EventDetails } from '@/utils/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Upload } from 'lucide-react';
-import { useState } from 'react';
 
 interface CreateEventFormProps {
   eventDetails: EventDetails;

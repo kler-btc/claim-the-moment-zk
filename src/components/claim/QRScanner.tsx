@@ -1,10 +1,10 @@
 
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, AlertCircle, Camera } from 'lucide-react';
 import QrReader from 'react-qr-scanner';
 import { useCamera } from '@/hooks/use-camera';
-import { useState, useEffect } from 'react';
 
 interface QRScannerProps {
   isScanning: boolean;

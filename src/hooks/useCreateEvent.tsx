@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { EventDetails, CompressionResult } from '@/utils/types';
 import { createEvent } from '@/utils/eventServices';
 import { toast } from '@/components/ui/use-toast';
