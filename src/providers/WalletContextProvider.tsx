@@ -5,8 +5,8 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { 
   PhantomWalletAdapter, 
   SolflareWalletAdapter,
-  // BackpackWalletAdapter doesn't exist in the library, using available adapters instead
-  BraveWalletAdapter,
+  // Using available adapters only
+  BackpackWalletAdapter,
   CoinbaseWalletAdapter 
 } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
@@ -33,7 +33,6 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children
     () => [
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
-      new BraveWalletAdapter(),
       new CoinbaseWalletAdapter(),
     ],
     []

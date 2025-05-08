@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { QRCodeSVG } from 'qrcode.react';
 import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createCompressedToken, EventDetails } from '@/utils/compressionUtils';
+import { createEvent } from '@/utils/eventServices';
+import { EventDetails } from '@/utils/types';
 
 const CreateEventPage = () => {
   const { connected, publicKey } = useWallet();
@@ -66,7 +66,7 @@ const CreateEventPage = () => {
 
     try {
       // Use the real ZK compression implementation
-      const compressionResult = await createCompressedToken(
+      const compressionResult = await createEvent(
         eventDetails, 
         publicKey.toString()
       );

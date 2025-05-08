@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -9,7 +8,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import QrReader from 'react-qr-scanner';
 import { AlertCircle, Check, Loader2 } from 'lucide-react';
-import { claimCompressedToken, verifyTokenClaim } from '@/utils/compressionUtils';
+import { claimEventToken } from '@/utils/eventServices';
+import { verifyTokenClaim } from '@/utils/compressionApi';
+import { getEventDetails } from '@/utils/eventServices';
 import { useCamera } from '@/hooks/use-camera';
 
 const ClaimPage = () => {
@@ -43,13 +44,10 @@ const ClaimPage = () => {
 
   const fetchEventDetails = async (id: string) => {
     try {
-      // In a real app, we would fetch event details from the blockchain or API
-      // For now, we'll use the data stored in localStorage during event creation
-      const eventDataKey = `event-${id}`;
-      const storedData = localStorage.getItem(eventDataKey);
+      // Get event details from the service
+      const parsedData = await getEventDetails(id);
       
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
+      if (parsedData) {
         setEventData({
           title: parsedData.title,
           organizer: parsedData.creator ? parsedData.creator.substring(0, 6) + '...' + parsedData.creator.substring(parsedData.creator.length - 4) : 'Unknown',
@@ -163,8 +161,8 @@ const ClaimPage = () => {
     setIsClaiming(true);
 
     try {
-      // Use the real Light Protocol claim function
-      const success = await claimCompressedToken(
+      // Use the event service to claim the token
+      const success = await claimEventToken(
         eventId,
         publicKey.toString()
       );
