@@ -1,10 +1,14 @@
 
-import { PublicKey, Connection, Transaction } from '@solana/web3.js';
+import { PublicKey, Connection } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { CompressionResult, EventDetails } from './types';
-import { getSolanaConnection, getLightRpc } from './compressionApi';
-import { createCompressedToken, claimCompressedToken, createTokenPool } from './tokenServices';
+import { getSolanaConnection } from './compressionApi';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
+import { 
+  createToken, 
+  createTokenPool as createCompressionPool, 
+  claimCompressedToken 
+} from './token';
 
 // Create a new token for an event with metadata
 export const createEvent = async (
@@ -18,7 +22,7 @@ export const createEvent = async (
 
   try {
     // Create a token with metadata for the event
-    const tokenResult = await createCompressedToken(
+    const tokenResult = await createToken(
       eventDetails, 
       walletPublicKey,
       connection,
@@ -49,7 +53,7 @@ export const createEventTokenPool = async (
     console.log("Creating token pool for mint:", mintAddress);
     
     // Create a token pool for compression
-    const poolResult = await createTokenPool(
+    const poolResult = await createCompressionPool(
       mintAddress,
       walletPublicKey,
       connection,
