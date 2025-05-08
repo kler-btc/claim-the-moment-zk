@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WalletContextProvider } from '@/providers/WalletContextProvider';
 import { Toaster } from '@/components/ui/sonner';
-import PageLayout from '@/components/layouts/PageLayout';
+import { PageLayout } from '@/components/layouts/PageLayout';
 import HomePage from '@/pages/HomePage';
 import CreateEventPage from '@/pages/CreateEventPage';
 import ClaimPage from '@/pages/ClaimPage';
