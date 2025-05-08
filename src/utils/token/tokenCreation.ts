@@ -1,203 +1,151 @@
-
 import { 
-  Connection, 
-  PublicKey, 
-  Keypair, 
+  Keypair,
+  PublicKey,
   Transaction,
-  sendAndConfirmTransaction,
-  Commitment
+  SystemProgram,
+  Connection,
+  sendAndConfirmTransaction
 } from '@solana/web3.js';
 import { 
-  getOrCreateAssociatedTokenAccount,
-  ASSOCIATED_TOKEN_PROGRAM_ID
+  createInitializeMintInstruction,
+  ExtensionType,
+  getMintLen,
+  createInitializeMetadataPointerInstruction,
+  TYPE_SIZE,
+  LENGTH_SIZE,
+  pack,
+  createInitializeInstruction
 } from '@solana/spl-token';
-import { toast } from 'sonner';
-import { EventDetails, CompressionResult } from '../types';
-import { getSolanaConnection } from '../compressionApi';
-import { createMintInstructions, createMintToInstruction } from './tokenInstructions';
-import { TOKEN_2022_PROGRAM_ID, TokenCreationResult, TransactionSigner } from './types';
+import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
+import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
+import { TOKEN_2022_PROGRAM_ID } from './types';
+import { CompressedTokenProgram } from '@lightprotocol/stateless.js';
 
-// Create a new token for an event with metadata
+/**
+ * Creates a token with metadata
+ */
 export const createToken = async (
   eventDetails: EventDetails,
-  walletPublicKey: string,
+  walletAddress: string,
   connection: Connection,
-  signTransaction: TransactionSigner['signTransaction']
-): Promise<CompressionResult> => {
-  console.log('Creating token with details:', eventDetails);
-  console.log('Using wallet:', walletPublicKey);
+  signTransaction: SignerWalletAdapter['signTransaction']
+): Promise<TokenCreationResult> => {
+  console.log('Creating token with metadata for event:', eventDetails.title);
+  console.log('Using wallet:', walletAddress);
 
   try {
-    // Get wallet public key
-    const walletPubkey = new PublicKey(walletPublicKey);
+    // Generate a new keypair for the mint
+    const mint = Keypair.generate();
     
-    // Generate keypair for mint
-    const mintKeypair = Keypair.generate();
-    console.log("Generated mint address:", mintKeypair.publicKey.toString());
-    
-    // Prepare metadata
-    const decimals = eventDetails.decimals || 0;
-    const metadata = { 
-      mint: mintKeypair.publicKey,
+    // Set token metadata
+    const metadata: TokenMetadata = {
+      mint: mint.publicKey,
       name: eventDetails.title,
       symbol: eventDetails.symbol,
       uri: eventDetails.imageUrl,
       additionalMetadata: [
-        ["event_date", eventDetails.date],
-        ["event_time", eventDetails.time],
-        ["event_location", eventDetails.location],
-        ["event_description", eventDetails.description || ""]
-      ],
+        ['description', eventDetails.description],
+        ['date', eventDetails.date],
+        ['time', eventDetails.time],
+        ['location', eventDetails.location],
+        ['supply', eventDetails.attendeeCount.toString()]
+      ]
     };
     
-    // Calculate required space and rent
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(1024); // Approximate size
+    // Generate random ID for this event (in a real app, this could be a database ID)
+    const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
+
+    // Initialize Transaction
+    const transaction = new Transaction();
+    const walletPubkey = new PublicKey(walletAddress);
+
+    // Calculate minimum required lamports for rent exemption
+    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+    const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+    const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen + metadataLen);
+
+    // Create account for the mint
+    const createAccountInstruction = SystemProgram.createAccount({
+      fromPubkey: walletPubkey,
+      newAccountPubkey: mint.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: TOKEN_2022_PROGRAM_ID
+    });
     
-    // Create a transaction for mint creation
-    const mintTx = new Transaction();
-    
-    // Get mint instructions and add to transaction
-    const mintInstructions = await createMintInstructions(
-      mintKeypair.publicKey,
+    // Add metadata pointer to the mint
+    const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
+      mint.publicKey,
       walletPubkey,
-      decimals,
-      metadata
+      mint.publicKey,
+      TOKEN_2022_PROGRAM_ID
     );
     
-    mintInstructions.forEach(instruction => {
-      mintTx.add(instruction);
+    // Initialize the mint
+    const decimals = eventDetails.decimals || 0;
+    const initializeMintInstruction = createInitializeMintInstruction(
+      mint.publicKey,
+      decimals,
+      walletPubkey,
+      null,
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Initialize metadata for the token
+    const initializeMetadataInstruction = createInitializeInstruction({
+      programId: TOKEN_2022_PROGRAM_ID,
+      mint: mint.publicKey,
+      metadata: mint.publicKey,
+      name: metadata.name,
+      symbol: metadata.symbol,
+      uri: metadata.uri,
+      mintAuthority: walletPubkey,
+      updateAuthority: walletPubkey,
     });
     
-    // Set transaction fee payer and recent blockhash
-    mintTx.feePayer = walletPubkey;
-    mintTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    // Add all instructions to the transaction
+    transaction.add(
+      createAccountInstruction,
+      metadataPointerInstruction,
+      initializeMintInstruction,
+      initializeMetadataInstruction
+    );
     
-    // Partial sign with the mint keypair
-    mintTx.partialSign(mintKeypair);
+    // Set fee payer and recent blockhash
+    transaction.feePayer = walletPubkey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
     
-    // Have the user sign the transaction
-    let signedTransaction;
-    try {
-      console.log("Requesting wallet signature for token creation...");
-      signedTransaction = await signTransaction(mintTx);
-      console.log("Transaction signed successfully by wallet");
-    } catch (error) {
-      console.error("Error signing transaction:", error);
-      throw new Error("User rejected transaction signing");
-    }
+    // Partially sign with the mint keypair
+    transaction.partialSign(mint);
     
-    // Send the signed transaction
-    let transactionId;
-    try {
-      console.log("Sending signed transaction to network...");
-      transactionId = await connection.sendRawTransaction(signedTransaction.serialize());
-      console.log("Transaction sent with ID:", transactionId);
-      
-      // Wait for confirmation
-      console.log("Waiting for transaction confirmation...");
-      const confirmation = await connection.confirmTransaction(transactionId, 'confirmed' as Commitment);
-      console.log("Transaction confirmed:", confirmation);
-      
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
-      }
-    } catch (error) {
-      console.error("Error sending/confirming transaction:", error);
-      throw new Error("Failed to send/confirm transaction to Solana network");
-    }
+    // Have the wallet sign the transaction
+    const signedTransaction = await signTransaction(transaction);
     
-    // Create a unique event ID
-    const eventId = `event-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    // Send and confirm the transaction
+    const txid = await connection.sendRawTransaction(signedTransaction.serialize());
     
-    // Create a claim URL with the event ID
-    const claimUrl = `/claim/${eventId}`;
+    // Wait for confirmation
+    await connection.confirmTransaction(txid, 'confirmed');
     
-    // Create QR code data that includes the event info
-    const qrCodeData = JSON.stringify({
-      type: 'cPOP-event',
-      eventId,
-      title: eventDetails.title,
-      symbol: eventDetails.symbol,
-      mintAddress: mintKeypair.publicKey.toString(),
-      timestamp: Date.now(),
-    });
-    
-    // For demonstration - in production we'd store event data more securely
+    // Store event data in local storage (in a real app, this would be in a database)
     const eventDataKey = `event-${eventId}`;
     localStorage.setItem(eventDataKey, JSON.stringify({
-      eventId,
-      mintAddress: mintKeypair.publicKey.toString(),
-      title: eventDetails.title,
-      symbol: eventDetails.symbol,
-      decimals: eventDetails.decimals,
-      imageUrl: eventDetails.imageUrl,
-      tokenAmount: eventDetails.attendeeCount,
-      creator: walletPublicKey,
-      createdAt: Date.now(),
-      transactionId
+      id: eventId,
+      mintAddress: mint.publicKey.toBase58(),
+      ...eventDetails,
+      createdAt: new Date().toISOString(),
+      creator: walletAddress
     }));
+    
+    console.log('Token created successfully with txid:', txid);
     
     return {
       eventId,
-      claimUrl,
-      merkleRoot: "", // Will be populated when token pool is created
-      qrCodeData,
-      mintAddress: mintKeypair.publicKey.toString(),
-      transactionId
+      mintAddress: mint.publicKey.toBase58(),
+      transactionId: txid
     };
   } catch (error) {
     console.error('Error creating token:', error);
-    toast.error("Error Creating Token: " + (error instanceof Error ? error.message : String(error)));
     throw new Error(`Failed to create token: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-// Helper to mint tokens to an account
-export const mintTokens = async (
-  connection: Connection,
-  mint: PublicKey,
-  recipient: PublicKey,
-  authority: PublicKey,
-  amount: number,
-  signTransaction: TransactionSigner['signTransaction']
-): Promise<TokenCreationResult> => {
-  try {
-    console.log(`Minting ${amount} tokens to recipient ${recipient.toString()}`);
-    
-    // Get or create associated token account
-    const ata = await getOrCreateAssociatedTokenAccount(
-      connection,
-      { publicKey: authority, signTransaction } as any,
-      mint,
-      recipient,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-    
-    // Create mint transaction
-    const mintTx = new Transaction();
-    
-    // Add mint instruction
-    mintTx.add(createMintToInstruction(mint, ata.address, authority, amount));
-    
-    // Set transaction properties
-    mintTx.feePayer = authority;
-    mintTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    
-    // Have user sign transaction
-    const signedTx = await signTransaction(mintTx);
-    
-    // Send and confirm transaction
-    const txId = await connection.sendRawTransaction(signedTx.serialize());
-    await connection.confirmTransaction(txId, 'confirmed' as Commitment);
-    
-    return {
-      mintAddress: mint.toString(),
-      transactionId: txId
-    };
-  } catch (error) {
-    console.error('Error minting tokens:', error);
-    throw new Error(`Failed to mint tokens: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
