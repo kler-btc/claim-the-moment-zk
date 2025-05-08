@@ -7,7 +7,8 @@ import {
   SystemProgram,
   TransactionInstruction,
   sendAndConfirmTransaction,
-  Signer
+  Signer,
+  Commitment
 } from '@solana/web3.js';
 import { 
   createMint, 
@@ -139,7 +140,7 @@ export const createCompressedToken = async (
       
       // Wait for confirmation
       console.log("Waiting for transaction confirmation...");
-      const confirmation = await connection.confirmTransaction(transactionId, 'confirmed');
+      const confirmation = await connection.confirmTransaction(transactionId, 'confirmed' as Commitment);
       console.log("Transaction confirmed:", confirmation);
       
       if (confirmation.value.err) {
@@ -258,15 +259,14 @@ export const createTokenPool = async (
     // Send and confirm the mint transaction
     console.log("Sending mint transaction...");
     const mintTxId = await connection.sendRawTransaction(signedMintTx.serialize());
-    await connection.confirmTransaction(mintTxId, 'confirmed');
+    await connection.confirmTransaction(mintTxId, 'confirmed' as Commitment);
     console.log("Tokens minted with transaction ID:", mintTxId);
     
     // Step 3: Create token pool using Light Protocol
     console.log("Creating token pool with Light Protocol...");
     
-    // This would be the real implementation
-    const poolTxInstructions = await CompressedTokenProgram.createTokenPool(
-      connection,
+    // Get the instruction for token pool creation
+    const poolTxInstructions = await CompressedTokenProgram.createPoolInstructions(
       walletPubkey,
       mintPubkey,
       undefined,  // Optional fee payer
@@ -274,7 +274,11 @@ export const createTokenPool = async (
     );
     
     // Create transaction for token pool creation
-    const poolTx = new Transaction().add(...poolTxInstructions);
+    const poolTx = new Transaction();
+    poolTxInstructions.forEach(instruction => {
+      poolTx.add(instruction);
+    });
+    
     poolTx.feePayer = walletPubkey;
     poolTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     
@@ -286,13 +290,12 @@ export const createTokenPool = async (
     console.log("Sending token pool transaction...");
     const poolTxId = await connection.sendRawTransaction(signedPoolTx.serialize());
     console.log("Waiting for token pool confirmation...");
-    await connection.confirmTransaction(poolTxId, 'confirmed');
+    await connection.confirmTransaction(poolTxId, 'confirmed' as Commitment);
     console.log("Token pool created with transaction ID:", poolTxId);
     
     // Step 4: Compress tokens
     console.log("Compressing tokens...");
-    const compressTxInstructions = await CompressedTokenProgram.compress(
-      connection,
+    const compressTxInstructions = await CompressedTokenProgram.compressInstructions(
       walletPubkey, // payer
       mintPubkey,   // mint address
       mintAmount,   // amount to compress
@@ -302,7 +305,11 @@ export const createTokenPool = async (
     );
     
     // Create transaction for token compression
-    const compressTx = new Transaction().add(...compressTxInstructions);
+    const compressTx = new Transaction();
+    compressTxInstructions.forEach(instruction => {
+      compressTx.add(instruction);
+    });
+    
     compressTx.feePayer = walletPubkey;
     compressTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     
@@ -314,7 +321,7 @@ export const createTokenPool = async (
     console.log("Sending compression transaction...");
     const compressTxId = await connection.sendRawTransaction(signedCompressTx.serialize());
     console.log("Waiting for compression confirmation...");
-    await connection.confirmTransaction(compressTxId, 'confirmed');
+    await connection.confirmTransaction(compressTxId, 'confirmed' as Commitment);
     console.log("Tokens compressed with transaction ID:", compressTxId);
     
     // Get merkle root hash (simulated for now)
@@ -361,17 +368,7 @@ export const claimCompressedToken = async (
     const creatorPubkey = new PublicKey(creator);
     const recipientPubkey = new PublicKey(recipientWallet);
     
-    // This would be the real implementation
-    const transferInstructions = await CompressedTokenProgram.transfer(
-      connection,
-      creatorPubkey, // payer
-      mintPubkey,    // mint
-      1,            // amount to transfer (1 token per attendee)
-      creatorPubkey, // current owner
-      recipientPubkey // new owner
-    );
-    
-    // In a real implementation, we'd execute the token transfer
+    // This would be the real implementation using Light Protocol
     // For now, just update local storage to simulate successful claim
     
     // Update claims in local storage
