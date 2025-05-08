@@ -3,10 +3,10 @@ import { PublicKey, Connection, Transaction } from '@solana/web3.js';
 import { toast } from '@/components/ui/use-toast';
 import { CompressionResult, EventDetails } from './types';
 import { getSolanaConnection, getLightRpc } from './compressionApi';
-import { createCompressedToken, claimCompressedToken } from './tokenServices';
+import { createCompressedToken, claimCompressedToken, createTokenPool } from './tokenServices';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
-// Create a new compressed token for an event
+// Create a new token for an event with metadata
 export const createEvent = async (
   eventDetails: EventDetails,
   walletPublicKey: string,
@@ -17,37 +17,16 @@ export const createEvent = async (
   console.log('Using wallet:', walletPublicKey);
 
   try {
-    // Create a compressed token for the event - now with transaction signing
-    const compressionResult = await createCompressedToken(
+    // Create a token with metadata for the event
+    const tokenResult = await createCompressedToken(
       eventDetails, 
       walletPublicKey,
       connection,
       signTransaction
     );
     
-    // Store event metadata in local storage (for demo purposes)
-    const eventDataKey = `event-${compressionResult.eventId}`;
-    localStorage.setItem(eventDataKey, JSON.stringify({
-      eventId: compressionResult.eventId,
-      mintAddress: compressionResult.mintAddress,
-      stateTreeAddress: compressionResult.merkleRoot,
-      stateTreeIndex: 0, // For demonstration
-      title: eventDetails.title,
-      symbol: eventDetails.symbol,
-      decimals: eventDetails.decimals,
-      imageUrl: eventDetails.imageUrl,
-      tokenAmount: eventDetails.attendeeCount,
-      creator: walletPublicKey,
-      createdAt: Date.now(),
-      transactionId: compressionResult.transactionId
-    }));
-    
-    toast({
-      title: "Event Created Successfully",
-      description: `Your event "${eventDetails.title}" has been created with compressed tokens on Solana devnet.`,
-    });
-    
-    return compressionResult;
+    // Return the result
+    return tokenResult;
   } catch (error) {
     console.error('Error creating event:', error);
     toast({
@@ -56,6 +35,35 @@ export const createEvent = async (
       variant: "destructive",
     });
     throw new Error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+// Create a token pool for compression
+export const createEventTokenPool = async (
+  mintAddress: string,
+  walletPublicKey: string,
+  connection: Connection,
+  signTransaction: SignerWalletAdapter['signTransaction']
+): Promise<{ transactionId: string, merkleRoot: string }> => {
+  try {
+    // Create a token pool for compression
+    const poolResult = await createTokenPool(
+      mintAddress,
+      walletPublicKey,
+      connection,
+      signTransaction
+    );
+    
+    // Return the result
+    return poolResult;
+  } catch (error) {
+    console.error('Error creating token pool:', error);
+    toast({
+      title: "Error Creating Token Pool",
+      description: "There was an error creating your token pool. Please try again.",
+      variant: "destructive",
+    });
+    throw new Error(`Failed to create token pool: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -88,12 +96,6 @@ export const claimEventToken = async (
     const success = await claimCompressedToken(eventId, recipientWallet);
     
     if (success) {
-      // Update claims in local storage
-      const claimsKey = `claims-${eventId}`;
-      let claims = JSON.parse(localStorage.getItem(claimsKey) || '[]');
-      claims.push(recipientWallet);
-      localStorage.setItem(claimsKey, JSON.stringify(claims));
-      
       toast({
         title: "Token Claimed Successfully",
         description: "You have successfully claimed the compressed token for this event.",

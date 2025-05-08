@@ -12,7 +12,12 @@ import {
   createMint, 
   getOrCreateAssociatedTokenAccount,
   mintTo,
+  getMintLen,
   TOKEN_PROGRAM_ID,
+  ExtensionType,
+  createInitializeMetadataPointerInstruction,
+  createInitializeMintInstruction,
+  createInitializeInstruction, 
   ASSOCIATED_TOKEN_PROGRAM_ID
 } from '@solana/spl-token';
 import { toast } from '@/components/ui/use-toast';
@@ -21,6 +26,9 @@ import { bn } from '@lightprotocol/stateless.js';
 import { getSolanaConnection, getLightRpc } from './compressionApi';
 import { EventDetails, CompressionResult } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
+
+// Token-2022 program ID
+const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 // Create a new compressed token for an event
 export const createCompressedToken = async (
@@ -33,40 +41,87 @@ export const createCompressedToken = async (
   console.log('Using wallet:', walletPublicKey);
 
   try {
-    // Get connection
-    const lightRpc = getLightRpc();
-    
     // Get wallet public key
     const walletPubkey = new PublicKey(walletPublicKey);
     
-    // Create a real transaction (simplified for demo)
-    const transaction = new Transaction();
-    
-    // Create a unique event ID (in production this would be from a database)
-    const eventId = `event-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    
-    // Generate keypair for mint (in production this would be deterministic)
+    // Generate keypair for mint
     const mintKeypair = Keypair.generate();
+    console.log("Generated mint address:", mintKeypair.publicKey.toString());
     
-    // Add instruction for compressed token mint (simplified for demo)
-    transaction.add(
+    // Prepare metadata
+    const decimals = eventDetails.decimals || 0;
+    const metadata = { 
+      mint: mintKeypair.publicKey,
+      name: eventDetails.title,
+      symbol: eventDetails.symbol,
+      uri: eventDetails.imageUrl,
+      additionalMetadata: [
+        ["event_date", eventDetails.date],
+        ["event_time", eventDetails.time],
+        ["event_location", eventDetails.location],
+        ["event_description", eventDetails.description || ""]
+      ],
+    };
+    
+    // Calculate required space and rent
+    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+    const metadataLen = 1024; // Approximate size for metadata
+    const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+    
+    // Create a transaction for mint creation
+    const mintTx = new Transaction();
+    
+    // Add instruction to create mint account
+    mintTx.add(
       SystemProgram.createAccount({
         fromPubkey: walletPubkey,
         newAccountPubkey: mintKeypair.publicKey,
-        space: 82,
-        lamports: await connection.getMinimumBalanceForRentExemption(82),
-        programId: TOKEN_PROGRAM_ID,
+        space: mintLen,
+        lamports: mintLamports,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),
+      // Initialize metadata pointer extension
+      createInitializeMetadataPointerInstruction(
+        mintKeypair.publicKey, 
+        walletPubkey,  // payer/update authority
+        mintKeypair.publicKey, // metadata address
+        TOKEN_2022_PROGRAM_ID
+      ),
+      // Initialize the mint with decimals
+      createInitializeMintInstruction(
+        mintKeypair.publicKey, 
+        decimals, 
+        walletPubkey, // mint authority
+        null, // freeze authority (null = no freeze)
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+    
+    // Add metadata initialization
+    mintTx.add(
+      createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        mint: mintKeypair.publicKey,
+        metadata: mintKeypair.publicKey,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+        mintAuthority: walletPubkey,
+        updateAuthority: walletPubkey,
       })
     );
     
     // Set transaction fee payer
-    transaction.feePayer = walletPubkey;
-    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    mintTx.feePayer = walletPubkey;
+    mintTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    
+    // Partial sign with the mint keypair
+    mintTx.partialSign(mintKeypair);
     
     // Have the user sign the transaction
     let signedTransaction;
     try {
-      signedTransaction = await signTransaction(transaction);
+      signedTransaction = await signTransaction(mintTx);
       console.log("Transaction signed successfully");
     } catch (error) {
       console.error("Error signing transaction:", error);
@@ -80,17 +135,24 @@ export const createCompressedToken = async (
       console.log("Transaction sent with ID:", transactionId);
       
       // Wait for confirmation
-      await connection.confirmTransaction(transactionId);
-      console.log("Transaction confirmed");
+      const confirmation = await connection.confirmTransaction(transactionId);
+      console.log("Transaction confirmed:", confirmation);
+      
+      if (confirmation.value.err) {
+        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      }
     } catch (error) {
-      console.error("Error sending transaction:", error);
-      throw new Error("Failed to send transaction to Solana network");
+      console.error("Error sending/confirming transaction:", error);
+      throw new Error("Failed to send/confirm transaction to Solana network");
     }
     
-    // Create a claim URL with the event ID and mint address
+    // Create a unique event ID
+    const eventId = `event-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    // Create a claim URL with the event ID
     const claimUrl = `/claim/${eventId}`;
     
-    // Create QR code data that includes the event ID, mint address, and other information
+    // Create QR code data that includes the event info
     const qrCodeData = JSON.stringify({
       type: 'cPOP-event',
       eventId,
@@ -100,25 +162,77 @@ export const createCompressedToken = async (
       timestamp: Date.now(),
     });
     
-    // Simulate state tree creation - in real implementation this would call the Light Protocol API
-    const stateTreeAddress = Keypair.generate().publicKey;
+    // For demonstration - in production we'd store event data more securely
+    const eventDataKey = `event-${eventId}`;
+    localStorage.setItem(eventDataKey, JSON.stringify({
+      eventId,
+      mintAddress: mintKeypair.publicKey.toString(),
+      title: eventDetails.title,
+      symbol: eventDetails.symbol,
+      decimals: eventDetails.decimals,
+      imageUrl: eventDetails.imageUrl,
+      tokenAmount: eventDetails.attendeeCount,
+      creator: walletPublicKey,
+      createdAt: Date.now(),
+      transactionId
+    }));
     
     return {
       eventId,
       claimUrl,
-      merkleRoot: stateTreeAddress.toString(),
+      merkleRoot: "", // Will be populated when token pool is created
       qrCodeData,
       mintAddress: mintKeypair.publicKey.toString(),
       transactionId
     };
   } catch (error) {
-    console.error('Error creating compressed token:', error);
+    console.error('Error creating token:', error);
     toast({
-      title: "Error Creating Event",
-      description: "There was an error creating your event tokens. Please try again.",
+      title: "Error Creating Token",
+      description: "There was an error creating your token. Please try again.",
       variant: "destructive",
     });
-    throw new Error(`Failed to create compressed token: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to create token: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+// Function to create the token pool for compression using Light Protocol
+export const createTokenPool = async (
+  mintAddress: string,
+  walletPublicKey: string,
+  connection: Connection,
+  signTransaction: SignerWalletAdapter['signTransaction']
+): Promise<{ transactionId: string, merkleRoot: string }> => {
+  console.log('Creating token pool for mint address:', mintAddress);
+  
+  try {
+    // Get Light Protocol RPC
+    const lightRpc = getLightRpc();
+    const walletPubkey = new PublicKey(walletPublicKey);
+    const mintPubkey = new PublicKey(mintAddress);
+    
+    // In a real implementation, we'd use the Light Protocol's createTokenPool function
+    // For demo purposes, we'll simulate this with a delay
+    // const poolTxId = await CompressedTokenProgram.createTokenPool(
+    //   connection,
+    //   walletPubkey, 
+    //   mintPubkey,
+    //   undefined,           // optional fee payer
+    //   TOKEN_2022_PROGRAM_ID
+    // );
+    
+    // For demo purposes
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const poolTxId = `pool-${Date.now().toString(36)}`;
+    const merkleRoot = `merkle-${Date.now().toString(36)}`;
+    
+    return {
+      transactionId: poolTxId,
+      merkleRoot
+    };
+  } catch (error) {
+    console.error('Error creating token pool:', error);
+    throw new Error(`Failed to create token pool: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -143,13 +257,12 @@ export const claimCompressedToken = async (
     }
     
     const eventData = JSON.parse(eventDataStr);
-    const { mintAddress, stateTreeAddress, creator } = eventData;
+    const { mintAddress, creator } = eventData;
     
     console.log(`Event data retrieved: ${JSON.stringify(eventData)}`);
     
     // Convert string addresses to PublicKeys
     const mintPubkey = new PublicKey(mintAddress);
-    const stateTreePubkey = new PublicKey(stateTreeAddress);
     const creatorPubkey = new PublicKey(creator);
     const recipientPubkey = new PublicKey(recipientWallet);
     
@@ -157,15 +270,21 @@ export const claimCompressedToken = async (
     // we'll simulate the token claim by logging what would happen
     console.log('Building compression instruction (simulated)...');
     
-    // Build transaction (simulated for demo)
-    const transaction = new Transaction();
-    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    transaction.feePayer = creatorPubkey;
+    // In a real implementation, we'd execute the token transfer
+    // const transferTxId = await CompressedTokenProgram.transfer(
+    //   connection,
+    //   creatorPubkey,
+    //   mintPubkey,
+    //   1, // Transfer one token
+    //   creatorPubkey, // From creator
+    //   recipientPubkey // To recipient
+    // );
     
-    // In production, this transaction would be signed by both the creator and recipient
-    // Since this is a demo with browser wallet, we would need to implement proper signing
-    
-    console.log('Transaction built and ready for signing via wallet adapter');
+    // Update claims in local storage
+    const claimsKey = `claims-${eventId}`;
+    let claims = JSON.parse(localStorage.getItem(claimsKey) || '[]');
+    claims.push(recipientWallet);
+    localStorage.setItem(claimsKey, JSON.stringify(claims));
     
     return true;
   } catch (error) {

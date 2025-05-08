@@ -5,12 +5,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Download, Copy, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from '@/components/ui/use-toast';
+import { CreationStep } from '@/hooks/useCreateEvent';
 
 interface QRCodeDisplayProps {
   qrCodeUrl: string | null;
   mintAddress: string | null;
   eventId: string | null;
   transactionId: string | null;
+  step: CreationStep;
   onDownload: () => void;
 }
 
@@ -19,6 +21,7 @@ const QRCodeDisplay = ({
   mintAddress, 
   eventId,
   transactionId,
+  step,
   onDownload 
 }: QRCodeDisplayProps) => {
   const [copied, setCopied] = useState(false);
@@ -42,7 +45,9 @@ const QRCodeDisplay = ({
       <CardHeader>
         <CardTitle>QR Code</CardTitle>
         <CardDescription>
-          For attendees to claim their tokens
+          {step === CreationStep.COMPLETE 
+            ? "Ready for attendees to claim tokens"
+            : "Will be generated after setup is complete"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
@@ -55,7 +60,13 @@ const QRCodeDisplay = ({
             />
           ) : (
             <div className="w-[180px] h-[180px] bg-muted flex items-center justify-center text-center text-sm text-muted-foreground p-4">
-              QR code will appear here after creating an event
+              {step === CreationStep.INITIAL 
+                ? "QR code will appear here after creating an event"
+                : step === CreationStep.TOKEN_CREATED
+                ? "Create a token pool to continue"
+                : step === CreationStep.POOL_CREATED
+                ? "Generate QR code to continue"
+                : "Loading QR code..."}
             </div>
           )}
         </div>

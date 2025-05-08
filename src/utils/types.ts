@@ -1,4 +1,3 @@
-
 // Event details interface
 export interface EventDetails {
   title: string;
@@ -16,8 +15,15 @@ export interface EventDetails {
 export interface CompressionResult {
   eventId: string;
   claimUrl: string;
-  merkleRoot?: string;
-  qrCodeData?: string;
-  mintAddress?: string;
-  transactionId?: string;
+  qrCodeData: string;
+  mintAddress: string | null;
+  merkleRoot: string | null;
+  transactionId: string | null;
+}
+
+export enum TokenCreationStep {
+  CREATE_TOKEN = 'create_token',
+  CREATE_POOL = 'create_pool',
+  GENERATE_QR = 'generate_qr',
+  COMPLETE = 'complete'
 }
