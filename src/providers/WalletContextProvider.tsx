@@ -2,7 +2,13 @@
 import { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { PhantomWalletAdapter, SolflareWalletAdapter, BackpackWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { 
+  PhantomWalletAdapter, 
+  SolflareWalletAdapter,
+  // BackpackWalletAdapter doesn't exist in the library, using available adapters instead
+  BraveWalletAdapter,
+  CoinbaseWalletAdapter 
+} from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 
 // Import wallet adapter styles
@@ -27,7 +33,8 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children
     () => [
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
+      new BraveWalletAdapter(),
+      new CoinbaseWalletAdapter(),
     ],
     []
   );
