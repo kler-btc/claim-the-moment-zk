@@ -2,10 +2,9 @@
 import { useState } from 'react';
 import { EventDetails, CompressionResult } from '@/utils/types';
 import { createEvent } from '@/utils/eventServices';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/use-toast';
 
 export const useCreateEvent = (walletPublicKey: string | null) => {
-  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [mintAddress, setMintAddress] = useState<string | null>(null);

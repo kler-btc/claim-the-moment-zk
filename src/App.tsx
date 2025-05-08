@@ -2,7 +2,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WalletContextProvider } from "./providers/WalletContextProvider";
 import { PageLayout } from "./components/layouts/PageLayout";
@@ -11,7 +11,15 @@ import CreateEventPage from "./pages/CreateEventPage";
 import ClaimPage from "./pages/ClaimPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Create a client
+const queryClient = {
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
+  }
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -113,7 +113,7 @@ const CreateEventForm = ({
         
           <Button 
             type="submit" 
-            className="solana-gradient-bg w-full"
+            className="w-full"
             disabled={isLoading}
           >
             {isLoading ? (
