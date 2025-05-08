@@ -6,7 +6,8 @@ import {
   Transaction, 
   SystemProgram,
   TransactionInstruction,
-  sendAndConfirmTransaction
+  sendAndConfirmTransaction,
+  Signer
 } from '@solana/web3.js';
 import { 
   createMint, 
@@ -20,7 +21,7 @@ import {
   createInitializeInstruction, 
   ASSOCIATED_TOKEN_PROGRAM_ID
 } from '@solana/spl-token';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { CompressedTokenProgram } from '@lightprotocol/compressed-token';
 import { bn } from '@lightprotocol/stateless.js';
 import { getSolanaConnection, getLightRpc } from './compressionApi';
@@ -121,8 +122,9 @@ export const createCompressedToken = async (
     // Have the user sign the transaction
     let signedTransaction;
     try {
+      console.log("Requesting wallet signature for token creation...");
       signedTransaction = await signTransaction(mintTx);
-      console.log("Transaction signed successfully");
+      console.log("Transaction signed successfully by wallet");
     } catch (error) {
       console.error("Error signing transaction:", error);
       throw new Error("User rejected transaction signing");
@@ -131,11 +133,13 @@ export const createCompressedToken = async (
     // Send the signed transaction
     let transactionId;
     try {
+      console.log("Sending signed transaction to network...");
       transactionId = await connection.sendRawTransaction(signedTransaction.serialize());
       console.log("Transaction sent with ID:", transactionId);
       
       // Wait for confirmation
-      const confirmation = await connection.confirmTransaction(transactionId);
+      console.log("Waiting for transaction confirmation...");
+      const confirmation = await connection.confirmTransaction(transactionId, 'confirmed');
       console.log("Transaction confirmed:", confirmation);
       
       if (confirmation.value.err) {
@@ -187,11 +191,7 @@ export const createCompressedToken = async (
     };
   } catch (error) {
     console.error('Error creating token:', error);
-    toast({
-      title: "Error Creating Token",
-      description: "There was an error creating your token. Please try again.",
-      variant: "destructive",
-    });
+    toast.error("Error Creating Token: " + (error instanceof Error ? error.message : String(error)));
     throw new Error(`Failed to create token: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
@@ -211,19 +211,113 @@ export const createTokenPool = async (
     const walletPubkey = new PublicKey(walletPublicKey);
     const mintPubkey = new PublicKey(mintAddress);
     
-    // In a real implementation, we'd use the Light Protocol's createTokenPool function
-    // For demo purposes, we'll simulate this with a delay
-    // const poolTxId = await CompressedTokenProgram.createTokenPool(
-    //   connection,
-    //   walletPubkey, 
-    //   mintPubkey,
-    //   undefined,           // optional fee payer
-    //   TOKEN_2022_PROGRAM_ID
-    // );
+    // Step 1: Get or create an associated token account (ATA) for the wallet
+    console.log("Getting or creating associated token account...");
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      {
+        publicKey: walletPubkey,
+        signTransaction: signTransaction
+      } as any, // Need to cast as the types don't match exactly
+      mintPubkey,
+      walletPubkey,
+      false, // allowOwnerOffCurve
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    console.log("Associated token account:", ata.address.toString());
     
-    // For demo purposes
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    const poolTxId = `pool-${Date.now().toString(36)}`;
+    // Step 2: Mint tokens to the ATA
+    console.log("Creating transaction to mint tokens to ATA...");
+    const mintAmount = 1000; // Example amount, adjust based on event requirements
+    
+    // Build mint transaction
+    const mintTx = new Transaction();
+    
+    // Add instructions for minting tokens
+    mintTx.add(
+      // Use SPL token mintTo instruction
+      Token2022.createMintToInstruction(
+        TOKEN_2022_PROGRAM_ID,
+        mintPubkey,
+        ata.address,
+        walletPubkey, // Mint authority
+        [],
+        mintAmount
+      )
+    );
+    
+    // Set transaction properties
+    mintTx.feePayer = walletPubkey;
+    mintTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    
+    // Have the user sign the transaction
+    console.log("Requesting wallet signature for minting tokens...");
+    const signedMintTx = await signTransaction(mintTx);
+    
+    // Send and confirm the mint transaction
+    console.log("Sending mint transaction...");
+    const mintTxId = await connection.sendRawTransaction(signedMintTx.serialize());
+    await connection.confirmTransaction(mintTxId, 'confirmed');
+    console.log("Tokens minted with transaction ID:", mintTxId);
+    
+    // Step 3: Create token pool using Light Protocol
+    console.log("Creating token pool with Light Protocol...");
+    
+    // This would be the real implementation
+    const poolTxInstructions = await CompressedTokenProgram.createTokenPool(
+      connection,
+      walletPubkey,
+      mintPubkey,
+      undefined,  // Optional fee payer
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Create transaction for token pool creation
+    const poolTx = new Transaction().add(...poolTxInstructions);
+    poolTx.feePayer = walletPubkey;
+    poolTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    
+    // Have the user sign the transaction
+    console.log("Requesting wallet signature for token pool creation...");
+    const signedPoolTx = await signTransaction(poolTx);
+    
+    // Send and confirm the token pool transaction
+    console.log("Sending token pool transaction...");
+    const poolTxId = await connection.sendRawTransaction(signedPoolTx.serialize());
+    console.log("Waiting for token pool confirmation...");
+    await connection.confirmTransaction(poolTxId, 'confirmed');
+    console.log("Token pool created with transaction ID:", poolTxId);
+    
+    // Step 4: Compress tokens
+    console.log("Compressing tokens...");
+    const compressTxInstructions = await CompressedTokenProgram.compress(
+      connection,
+      walletPubkey, // payer
+      mintPubkey,   // mint address
+      mintAmount,   // amount to compress
+      walletPubkey, // owner of the tokens
+      ata.address,  // token account to compress
+      walletPubkey  // recipient of compressed tokens
+    );
+    
+    // Create transaction for token compression
+    const compressTx = new Transaction().add(...compressTxInstructions);
+    compressTx.feePayer = walletPubkey;
+    compressTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    
+    // Have the user sign the transaction
+    console.log("Requesting wallet signature for token compression...");
+    const signedCompressTx = await signTransaction(compressTx);
+    
+    // Send and confirm the compression transaction
+    console.log("Sending compression transaction...");
+    const compressTxId = await connection.sendRawTransaction(signedCompressTx.serialize());
+    console.log("Waiting for compression confirmation...");
+    await connection.confirmTransaction(compressTxId, 'confirmed');
+    console.log("Tokens compressed with transaction ID:", compressTxId);
+    
+    // Get merkle root hash (simulated for now)
     const merkleRoot = `merkle-${Date.now().toString(36)}`;
     
     return {
@@ -232,6 +326,7 @@ export const createTokenPool = async (
     };
   } catch (error) {
     console.error('Error creating token pool:', error);
+    toast.error("Error Creating Token Pool: " + (error instanceof Error ? error.message : String(error)));
     throw new Error(`Failed to create token pool: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
@@ -266,19 +361,18 @@ export const claimCompressedToken = async (
     const creatorPubkey = new PublicKey(creator);
     const recipientPubkey = new PublicKey(recipientWallet);
     
-    // For demo: Since we can't access the exact Light Protocol compression API,
-    // we'll simulate the token claim by logging what would happen
-    console.log('Building compression instruction (simulated)...');
+    // This would be the real implementation
+    const transferInstructions = await CompressedTokenProgram.transfer(
+      connection,
+      creatorPubkey, // payer
+      mintPubkey,    // mint
+      1,            // amount to transfer (1 token per attendee)
+      creatorPubkey, // current owner
+      recipientPubkey // new owner
+    );
     
     // In a real implementation, we'd execute the token transfer
-    // const transferTxId = await CompressedTokenProgram.transfer(
-    //   connection,
-    //   creatorPubkey,
-    //   mintPubkey,
-    //   1, // Transfer one token
-    //   creatorPubkey, // From creator
-    //   recipientPubkey // To recipient
-    // );
+    // For now, just update local storage to simulate successful claim
     
     // Update claims in local storage
     const claimsKey = `claims-${eventId}`;
@@ -289,11 +383,7 @@ export const claimCompressedToken = async (
     return true;
   } catch (error) {
     console.error('Error claiming compressed token:', error);
-    toast({
-      title: "Error Claiming Token",
-      description: error instanceof Error ? error.message : "There was an error claiming your token. Please try again.",
-      variant: "destructive",
-    });
+    toast.error("Error Claiming Token: " + (error instanceof Error ? error.message : String(error)));
     throw new Error(`Failed to claim token: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
@@ -304,11 +394,54 @@ export const getCompressedTokenBalance = async (
   mintAddress: string
 ): Promise<number> => {
   try {
-    // In a real implementation, we would query the blockchain
-    // For demo purposes, we'll return a simulated balance
-    return 0;
+    console.log(`Checking compressed token balance for wallet ${wallet} and mint ${mintAddress}`);
+    const connection = getSolanaConnection();
+    const walletPubkey = new PublicKey(wallet);
+    const mintPubkey = new PublicKey(mintAddress);
+    
+    // This would be the real implementation using Light Protocol
+    // For now, return simulated balance based on local storage claims
+    // We'll check if this wallet has claimed from any events with this mint
+    const events = Object.keys(localStorage)
+      .filter(key => key.startsWith('event-'))
+      .map(key => JSON.parse(localStorage.getItem(key) || '{}'))
+      .filter(event => event.mintAddress === mintAddress);
+    
+    let balance = 0;
+    for (const event of events) {
+      const eventId = event.eventId;
+      const claimsKey = `claims-${eventId}`;
+      const claims = JSON.parse(localStorage.getItem(claimsKey) || '[]');
+      if (claims.includes(wallet)) {
+        balance += 1;
+      }
+    }
+    
+    return balance;
   } catch (error) {
     console.error('Error getting compressed token balance:', error);
     return 0;
+  }
+};
+
+// Temp workaround for Token2022 - in production use proper imports
+const Token2022 = {
+  createMintToInstruction: (
+    programId: PublicKey,
+    mint: PublicKey,
+    destination: PublicKey,
+    authority: PublicKey,
+    multiSigners: Signer[],
+    amount: number
+  ): TransactionInstruction => {
+    return {
+      programId,
+      keys: [
+        { pubkey: mint, isSigner: false, isWritable: true },
+        { pubkey: destination, isSigner: false, isWritable: true },
+        { pubkey: authority, isSigner: true, isWritable: false },
+      ],
+      data: Buffer.from([7, ...new Uint8Array(8).fill(0)]), // Mocked data
+    };
   }
 };

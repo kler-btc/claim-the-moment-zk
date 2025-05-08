@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { EventDetails, CompressionResult } from '@/utils/types';
-import { createEvent } from '@/utils/eventServices';
-import { toast } from '@/components/ui/use-toast';
+import { EventDetails, CompressionResult, TokenCreationStep } from '@/utils/types';
+import { createEvent, createEventTokenPool } from '@/utils/eventServices';
+import { toast } from 'sonner';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
 
@@ -52,10 +52,8 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
     e.preventDefault();
     
     if (!walletPublicKey || !signTransaction || !publicKey) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to create an event",
-        variant: "destructive",
+      toast.error("Wallet not connected", {
+        description: "Please connect your wallet to create an event"
       });
       return;
     }
@@ -68,25 +66,32 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
         eventDetails.symbol.trim() === '' ||
         eventDetails.imageUrl.trim() === '' ||
         eventDetails.attendeeCount <= 0) {
-      toast({
-        title: "Invalid Event Details",
-        description: "Please fill in all required fields with valid information.",
-        variant: "destructive",
+      toast.error("Invalid Event Details", {
+        description: "Please fill in all required fields with valid information."
       });
       return;
     }
 
     setIsLoading(true);
     setStep(CreationStep.CREATING_TOKEN);
+    
+    console.log("Starting token creation process...");
+    toast.info("Creating your event token...", {
+      description: "Please approve the transaction in your wallet."
+    });
 
     try {
       // Create the token with metadata using Token-2022
+      console.log("Sending token creation request...");
+      
       const tokenResult = await createEvent(
         eventDetails, 
         walletPublicKey,
         connection,
         signTransaction
       );
+      
+      console.log("Token creation successful:", tokenResult);
       
       // Update state with token details
       setMintAddress(tokenResult.mintAddress || null);
@@ -96,17 +101,14 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
       // Update step
       setStep(CreationStep.TOKEN_CREATED);
       
-      toast({
-        title: "Token Created Successfully!",
-        description: "Your event token has been created with Token-2022 metadata.",
+      toast.success("Token Created Successfully!", {
+        description: "Your event token has been created with Token-2022 metadata."
       });
     } catch (error) {
       console.error("Error creating token:", error);
       setStep(CreationStep.INITIAL);
-      toast({
-        title: "Error creating token",
-        description: error instanceof Error ? error.message : "Failed to mint token. Please try again.",
-        variant: "destructive",
+      toast.error("Error creating token", {
+        description: error instanceof Error ? error.message : "Failed to mint token. Please try again."
       });
     } finally {
       setIsLoading(false);
@@ -116,25 +118,32 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
   // Step 2: Create Token Pool
   const handleCreateTokenPool = async () => {
     if (!mintAddress || !walletPublicKey || !signTransaction) {
-      toast({
-        title: "Cannot create token pool",
-        description: "Missing required token information or wallet connection",
-        variant: "destructive",
+      toast.error("Cannot create token pool", {
+        description: "Missing required token information or wallet connection"
       });
       return;
     }
 
     setIsLoading(true);
     setStep(CreationStep.CREATING_POOL);
+    
+    console.log("Starting token pool creation process...");
+    toast.info("Creating compression pool...", {
+      description: "Please approve the transaction in your wallet."
+    });
 
     try {
       // Call token pool creation function
-      const poolResult = await createTokenPool(
+      console.log("Sending token pool creation request with mint:", mintAddress);
+      
+      const poolResult = await createEventTokenPool(
         mintAddress, 
         walletPublicKey,
         connection,
         signTransaction
       );
+      
+      console.log("Pool creation successful:", poolResult);
       
       // Update with pool transaction ID
       setPoolTransactionId(poolResult.transactionId);
@@ -142,17 +151,14 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
       // Update step
       setStep(CreationStep.POOL_CREATED);
       
-      toast({
-        title: "Token Pool Created!",
-        description: "Your token is now registered with Light Protocol compression.",
+      toast.success("Token Pool Created!", {
+        description: "Your token is now registered with Light Protocol compression."
       });
     } catch (error) {
       console.error("Error creating token pool:", error);
       setStep(CreationStep.TOKEN_CREATED); // Go back to the token created step
-      toast({
-        title: "Error creating token pool",
-        description: error instanceof Error ? error.message : "Failed to create token pool. Please try again.",
-        variant: "destructive",
+      toast.error("Error creating token pool", {
+        description: error instanceof Error ? error.message : "Failed to create token pool. Please try again."
       });
     } finally {
       setIsLoading(false);
@@ -162,10 +168,8 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
   // Step 3: Generate QR Code
   const handleGenerateQR = async () => {
     if (!eventId) {
-      toast({
-        title: "Cannot generate QR code",
-        description: "Missing event information",
-        variant: "destructive",
+      toast.error("Cannot generate QR code", {
+        description: "Missing event information"
       });
       return;
     }
@@ -174,8 +178,11 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
     setStep(CreationStep.GENERATING_QR);
 
     try {
+      console.log("Generating QR code for event ID:", eventId);
+      
       // Generate the full claim URL with the host to ensure it's a valid URL for QR scanning
       const claimUrl = `${window.location.origin}/claim/${eventId}`;
+      console.log("Generated claim URL:", claimUrl);
       
       // Set the QR code URL
       setQrCodeUrl(claimUrl);
@@ -183,16 +190,13 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
       // Update step
       setStep(CreationStep.COMPLETE);
       
-      toast({
-        title: "QR Code Generated!",
-        description: "Your QR code is ready for sharing with attendees.",
+      toast.success("QR Code Generated!", {
+        description: "Your QR code is ready for sharing with attendees."
       });
     } catch (error) {
       console.error("Error generating QR code:", error);
-      toast({
-        title: "Error generating QR code",
-        description: "Failed to generate QR code. Please try again.",
-        variant: "destructive",
+      toast.error("Error generating QR code", {
+        description: "Failed to generate QR code. Please try again."
       });
     } finally {
       setIsLoading(false);
@@ -228,23 +232,3 @@ export const useCreateEvent = (walletPublicKey: string | null) => {
     downloadQRCode
   };
 };
-
-// Function to create a token pool for compression
-async function createTokenPool(
-  mintAddress: string,
-  walletPublicKey: string,
-  connection: any,
-  signTransaction: any
-) {
-  console.log(`Creating token pool for mint: ${mintAddress}`);
-  
-  // This would be replaced with actual token pool creation using Light Protocol
-  // For now, we'll simulate the operation with a delay
-  return new Promise<{ transactionId: string }>((resolve) => {
-    setTimeout(() => {
-      resolve({
-        transactionId: `pool-${Date.now().toString(36)}`
-      });
-    }, 2000);
-  });
-}

@@ -1,6 +1,6 @@
 
 import { PublicKey, Connection, Transaction } from '@solana/web3.js';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { CompressionResult, EventDetails } from './types';
 import { getSolanaConnection, getLightRpc } from './compressionApi';
 import { createCompressedToken, claimCompressedToken, createTokenPool } from './tokenServices';
@@ -25,14 +25,14 @@ export const createEvent = async (
       signTransaction
     );
     
+    console.log("Token created successfully:", tokenResult);
+    
     // Return the result
     return tokenResult;
   } catch (error) {
     console.error('Error creating event:', error);
-    toast({
-      title: "Error Creating Event",
-      description: "There was an error creating your event tokens. Please try again.",
-      variant: "destructive",
+    toast.error("Error Creating Event", {
+      description: "There was an error creating your event tokens. Please try again."
     });
     throw new Error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -46,6 +46,8 @@ export const createEventTokenPool = async (
   signTransaction: SignerWalletAdapter['signTransaction']
 ): Promise<{ transactionId: string, merkleRoot: string }> => {
   try {
+    console.log("Creating token pool for mint:", mintAddress);
+    
     // Create a token pool for compression
     const poolResult = await createTokenPool(
       mintAddress,
@@ -54,14 +56,14 @@ export const createEventTokenPool = async (
       signTransaction
     );
     
+    console.log("Token pool created successfully:", poolResult);
+    
     // Return the result
     return poolResult;
   } catch (error) {
     console.error('Error creating token pool:', error);
-    toast({
-      title: "Error Creating Token Pool",
-      description: "There was an error creating your token pool. Please try again.",
-      variant: "destructive",
+    toast.error("Error Creating Token Pool", {
+      description: "There was an error creating your token pool. Please try again."
     });
     throw new Error(`Failed to create token pool: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -96,9 +98,8 @@ export const claimEventToken = async (
     const success = await claimCompressedToken(eventId, recipientWallet);
     
     if (success) {
-      toast({
-        title: "Token Claimed Successfully",
-        description: "You have successfully claimed the compressed token for this event.",
+      toast.success("Token Claimed Successfully", {
+        description: "You have successfully claimed the compressed token for this event."
       });
       
       return true;
@@ -107,10 +108,8 @@ export const claimEventToken = async (
     return false;
   } catch (error) {
     console.error('Error claiming token:', error);
-    toast({
-      title: "Error Claiming Token",
-      description: error instanceof Error ? error.message : "There was an error claiming your token. Please try again.",
-      variant: "destructive",
+    toast.error("Error Claiming Token", {
+      description: error instanceof Error ? error.message : "There was an error claiming your token. Please try again."
     });
     throw new Error(`Failed to claim token: ${error instanceof Error ? error.message : String(error)}`);
   }
