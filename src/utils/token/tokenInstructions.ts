@@ -97,6 +97,6 @@ export const createMintToInstruction = (
       { pubkey: destination, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: false },
     ],
-    data: createBuffer(buffer)
+    data: createBuffer(buffer) as Buffer
   });
 };

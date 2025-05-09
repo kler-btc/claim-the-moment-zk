@@ -31,10 +31,11 @@ export const createTokenPool = async (
     });
     
     // Create a proper TransactionInstruction object
+    // Use type assertion here to resolve the TypeScript error
     const poolInstruction = new TransactionInstruction({
       programId: poolInstructionData.programId,
       keys: poolInstructionData.keys,
-      data: poolInstructionData.data
+      data: poolInstructionData.data as Buffer
     });
     
     // Create and sign the transaction

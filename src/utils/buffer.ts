@@ -95,7 +95,7 @@ export class BufferPolyfill {
 }
 
 // This helper function creates a buffer that will be compatible with @solana/web3.js
-export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfill): Buffer | Uint8Array {
+export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfill): Buffer {
   if (typeof Buffer !== 'undefined') {
     // Node.js environment - use real Buffer
     if (data instanceof BufferPolyfill) {
@@ -105,24 +105,31 @@ export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfi
                        typeof data === 'string' ? new TextEncoder().encode(data) : 
                        data);
   } else {
-    // Browser environment - create Uint8Array to use instead of Buffer
+    // Browser environment - we need to return something that will work with TransactionInstruction
+    // Cast to Buffer type since we're in browser without real Buffer
     const bufferData = data instanceof BufferPolyfill ? data.bytes :
-                      data instanceof Uint8Array ? data :
-                      typeof data === 'string' ? new TextEncoder().encode(data) :
-                      new Uint8Array(data);
+                       data instanceof Uint8Array ? data :
+                       typeof data === 'string' ? new TextEncoder().encode(data) :
+                       new Uint8Array(data);
     
-    return bufferData;
+    return bufferData as unknown as Buffer;
   }
 }
 
 // Create a global Buffer polyfill in browser environments
-if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefined') {
-  (window as any).Buffer = {
+if (typeof window !== 'undefined' && typeof (global as any).Buffer === 'undefined') {
+  (global as any).Buffer = {
     from: (data: number[] | string | Uint8Array, encoding?: string) => {
-      return createBuffer(data);
+      const bytes = typeof data === 'string' 
+        ? new TextEncoder().encode(data)
+        : data instanceof Uint8Array 
+          ? data 
+          : new Uint8Array(data);
+          
+      return bytes as unknown as Buffer;
     },
     alloc: (size: number) => {
-      return new Uint8Array(size);
+      return new Uint8Array(size) as unknown as Buffer;
     },
     isBuffer: (obj: any) => {
       return obj instanceof Uint8Array || 
