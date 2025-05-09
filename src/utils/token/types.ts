@@ -15,6 +15,7 @@ export interface TokenMetadata {
 }
 
 export interface TokenCreationResult {
+  eventId: string;
   mintAddress: string;
   transactionId: string;
 }
@@ -28,3 +29,7 @@ export interface TransactionSigner {
   publicKey: PublicKey;
   signTransaction: SignerWalletAdapter['signTransaction'];
 }
+
+// Re-export EventDetails from utils/types
+import { EventDetails } from '@/utils/types';
+export { EventDetails };

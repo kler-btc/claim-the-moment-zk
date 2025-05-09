@@ -1,4 +1,3 @@
-
 import { PublicKey, Connection } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { CompressionResult, EventDetails } from './types';
@@ -31,8 +30,15 @@ export const createEvent = async (
     
     console.log("Token created successfully:", tokenResult);
     
-    // Return the result
-    return tokenResult;
+    // Return the result with additional fields to match CompressionResult
+    return {
+      eventId: tokenResult.eventId,
+      claimUrl: `${window.location.origin}/claim/${tokenResult.eventId}`,
+      qrCodeData: tokenResult.eventId,
+      mintAddress: tokenResult.mintAddress,
+      merkleRoot: null,
+      transactionId: tokenResult.transactionId
+    };
   } catch (error) {
     console.error('Error creating event:', error);
     toast.error("Error Creating Event", {

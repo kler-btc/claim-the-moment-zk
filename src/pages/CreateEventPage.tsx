@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import TokenDetails from '@/components/token/TokenDetails';
 
 const CreateEventPage = () => {
   const { connected, publicKey } = useWallet();
@@ -26,6 +27,12 @@ const CreateEventPage = () => {
     handleGenerateQR,
     downloadQRCode 
   } = useCreateEvent(publicKey?.toString() || null);
+
+  // Wrapper function to handle Promise<boolean> to Promise<void> conversion
+  const onSubmit = async (e: React.FormEvent) => {
+    await handleCreateEvent(e);
+    return;
+  };
 
   if (!connected) {
     return <WalletAlert />;
@@ -85,7 +92,7 @@ const CreateEventPage = () => {
             <CreateEventForm 
               eventDetails={eventDetails}
               isLoading={isLoading}
-              onSubmit={handleCreateEvent}
+              onSubmit={onSubmit}
               onChange={handleInputChange}
             />
           )}
@@ -97,13 +104,13 @@ const CreateEventPage = () => {
                 <CardTitle>Token Created Successfully!</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="p-4 bg-muted rounded-md">
-                  <p className="text-sm mb-2"><span className="font-medium">Token Details:</span></p>
-                  <p className="text-sm"><span className="font-medium">Name:</span> {eventDetails.title}</p>
-                  <p className="text-sm"><span className="font-medium">Symbol:</span> {eventDetails.symbol}</p>
-                  <p className="text-sm"><span className="font-medium">Mint Address:</span> {mintAddress}</p>
-                  <p className="text-sm"><span className="font-medium">Transaction:</span> {transactionId}</p>
-                </div>
+                <TokenDetails 
+                  title={eventDetails.title}
+                  symbol={eventDetails.symbol}
+                  mintAddress={mintAddress}
+                  transactionId={transactionId}
+                  variant="compact"
+                />
                 
                 <p className="text-sm text-muted-foreground">
                   Next, let's create a token pool for compression using Light Protocol.
@@ -131,12 +138,13 @@ const CreateEventPage = () => {
                 <CardTitle>Token Pool Created!</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="p-4 bg-muted rounded-md">
-                  <p className="text-sm mb-2"><span className="font-medium">Pool Details:</span></p>
-                  <p className="text-sm"><span className="font-medium">Token:</span> {eventDetails.title} ({eventDetails.symbol})</p>
-                  <p className="text-sm"><span className="font-medium">Mint Address:</span> {mintAddress}</p>
-                  <p className="text-sm"><span className="font-medium">Pool Transaction:</span> {poolTransactionId}</p>
-                </div>
+                <TokenDetails 
+                  title={eventDetails.title}
+                  symbol={eventDetails.symbol}
+                  mintAddress={mintAddress}
+                  poolTransactionId={poolTransactionId}
+                  variant="compact"
+                />
                 
                 <p className="text-sm text-muted-foreground">
                   Now, let's generate a QR code that attendees can scan to claim tokens.
@@ -169,13 +177,14 @@ const CreateEventPage = () => {
                   <p className="text-sm text-green-700 mt-2">Share the QR code with your event attendees so they can claim their tokens.</p>
                 </div>
                 
-                <div className="p-4 bg-muted rounded-md">
-                  <p className="text-sm mb-2"><span className="font-medium">Event Details:</span></p>
-                  <p className="text-sm"><span className="font-medium">Name:</span> {eventDetails.title}</p>
-                  <p className="text-sm"><span className="font-medium">Date:</span> {eventDetails.date} at {eventDetails.time}</p>
-                  <p className="text-sm"><span className="font-medium">Location:</span> {eventDetails.location}</p>
-                  <p className="text-sm"><span className="font-medium">Token Supply:</span> {eventDetails.attendeeCount}</p>
-                </div>
+                <TokenDetails 
+                  title={eventDetails.title}
+                  date={eventDetails.date}
+                  time={eventDetails.time}
+                  location={eventDetails.location}
+                  attendeeCount={eventDetails.attendeeCount}
+                  variant="full"
+                />
               </CardContent>
             </Card>
           )}

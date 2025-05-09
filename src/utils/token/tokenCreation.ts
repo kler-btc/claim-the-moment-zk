@@ -1,3 +1,4 @@
+
 import { 
   Keypair,
   PublicKey,
@@ -13,13 +14,12 @@ import {
   createInitializeMetadataPointerInstruction,
   TYPE_SIZE,
   LENGTH_SIZE,
-  pack,
   createInitializeInstruction
 } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID } from './types';
-import { CompressedTokenProgram } from '@lightprotocol/stateless.js';
+import { COMPRESSED_TOKEN_PROGRAM_ID } from '@lightprotocol/stateless.js';
 
 /**
  * Creates a token with metadata
@@ -61,7 +61,12 @@ export const createToken = async (
 
     // Calculate minimum required lamports for rent exemption
     const mintLen = getMintLen([ExtensionType.MetadataPointer]);
-    const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+    // Instead of using pack, calculate metadataLen differently
+    const metadataLen = TYPE_SIZE + LENGTH_SIZE + 
+      metadata.name.length + metadata.symbol.length + metadata.uri.length + 
+      (metadata.additionalMetadata ? metadata.additionalMetadata.reduce((acc, [k, v]) => acc + k.length + v.length, 0) : 0) + 
+      256; // Add extra space for serialization overhead
+    
     const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen + metadataLen);
 
     // Create account for the mint
