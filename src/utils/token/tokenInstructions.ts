@@ -10,12 +10,10 @@ import {
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
   createInitializeInstruction,
-  LENGTH_SIZE,
-  TYPE_SIZE,
-  pack
 } from '@solana/spl-token';
 import { TOKEN_2022_PROGRAM_ID, TokenMetadata } from './types';
 import { BufferPolyfill, createBuffer } from '../buffer';
+import { calculateMetadataSize, METADATA_TYPE_SIZE, METADATA_LENGTH_SIZE } from './tokenMetadataUtils';
 
 // Helper to create mint instructions
 export const createMintInstructions = async (
@@ -27,9 +25,8 @@ export const createMintInstructions = async (
   // Calculate required space and rent for the mint account
   const mintLen = getMintLen([ExtensionType.MetadataPointer]);
   
-  // Calculate the metadata length based on the packed metadata
-  const packedMetadata = pack(metadata);
-  const metadataLen = TYPE_SIZE + LENGTH_SIZE + packedMetadata.length;
+  // Calculate the metadata length based on our utility function
+  const metadataLen = METADATA_TYPE_SIZE + METADATA_LENGTH_SIZE + calculateMetadataSize(metadata);
   const totalMintLen = mintLen + metadataLen;
   
   // Create instructions array

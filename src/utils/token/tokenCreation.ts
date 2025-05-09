@@ -12,13 +12,11 @@ import {
   getMintLen,
   createInitializeMetadataPointerInstruction,
   TOKEN_2022_PROGRAM_ID,
-  LENGTH_SIZE,
-  TYPE_SIZE,
-  pack
 } from '@solana/spl-token';
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
+import { calculateMetadataSize, METADATA_TYPE_SIZE, METADATA_LENGTH_SIZE } from './tokenMetadataUtils';
 
 /**
  * Creates a token with metadata
@@ -64,9 +62,8 @@ export const createToken = async (
     
     console.log(`Creating mint account with calculated space: ${mintLen} bytes`);
     
-    // Calculate the metadata length based on the packed metadata
-    const packedMetadata = pack(metadata);
-    const metadataLen = TYPE_SIZE + LENGTH_SIZE + packedMetadata.length;
+    // Calculate the metadata length based on our utility function
+    const metadataLen = METADATA_TYPE_SIZE + METADATA_LENGTH_SIZE + calculateMetadataSize(metadata);
     const totalMintLen = mintLen + metadataLen;
     
     console.log(`Total mint length including metadata: ${totalMintLen} bytes`);
