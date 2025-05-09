@@ -14,7 +14,8 @@ import {
   createInitializeMetadataPointerInstruction,
   TYPE_SIZE,
   LENGTH_SIZE,
-  createInitializeInstruction
+  createInitializeInstruction,
+  pack
 } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
@@ -58,22 +59,35 @@ export const createToken = async (
     // Initialize Transaction
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
-
-    // Calculate minimum required lamports for rent exemption
-    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
-    // Instead of using pack, calculate metadataLen differently
-    const metadataLen = TYPE_SIZE + LENGTH_SIZE + 
-      metadata.name.length + metadata.symbol.length + metadata.uri.length + 
-      (metadata.additionalMetadata ? metadata.additionalMetadata.reduce((acc, [k, v]) => acc + k.length + v.length, 0) : 0) + 
-      256; // Add extra space for serialization overhead
     
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen + metadataLen);
+    // Calculate space needed for the mint with MetadataPointer extension
+    const extensions = [ExtensionType.MetadataPointer];
+    const mintLen = getMintLen(extensions);
+    
+    // Calculate metadata size - use pack for accurate measurement
+    let additionalMetadataData: Buffer[] = [];
+    if (metadata.additionalMetadata) {
+      additionalMetadataData = metadata.additionalMetadata.map(([key, value]) => {
+        return Buffer.concat([
+          Buffer.from(key),
+          Buffer.from(value)
+        ]);
+      });
+    }
+    
+    // Calculate minimum required lamports for rent exemption
+    // Allocate extra space to ensure enough room for metadata
+    const baseSpace = mintLen + 1024; // Add extra space for metadata
+    const mintLamports = await connection.getMinimumBalanceForRentExemption(baseSpace);
+
+    console.log(`Creating mint account with space: ${baseSpace} bytes`);
+    console.log(`Mint lamports required: ${mintLamports}`);
 
     // Create account for the mint
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: mintLen,
+      space: baseSpace,
       lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
@@ -82,7 +96,7 @@ export const createToken = async (
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
       mint.publicKey,
       walletPubkey,
-      mint.publicKey,
+      mint.publicKey, // Point to self for metadata
       TOKEN_2022_PROGRAM_ID
     );
     
@@ -91,8 +105,8 @@ export const createToken = async (
     const initializeMintInstruction = createInitializeMintInstruction(
       mint.publicKey,
       decimals,
-      walletPubkey,
-      null,
+      walletPubkey, // Mint authority
+      walletPubkey, // Freeze authority (same as mint authority)
       TOKEN_2022_PROGRAM_ID
     );
     
@@ -106,9 +120,10 @@ export const createToken = async (
       uri: metadata.uri,
       mintAuthority: walletPubkey,
       updateAuthority: walletPubkey,
+      additionalMetadata: metadata.additionalMetadata || []
     });
     
-    // Add all instructions to the transaction
+    // Add all instructions to the transaction IN THE CORRECT ORDER
     transaction.add(
       createAccountInstruction,
       metadataPointerInstruction,
@@ -118,19 +133,40 @@ export const createToken = async (
     
     // Set fee payer and recent blockhash
     transaction.feePayer = walletPubkey;
-    transaction.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = blockhash;
     
     // Partially sign with the mint keypair
     transaction.partialSign(mint);
     
+    console.log("Transaction prepared, requesting wallet signature...");
+    
     // Have the wallet sign the transaction
     const signedTransaction = await signTransaction(transaction);
     
-    // Send and confirm the transaction
-    const txid = await connection.sendRawTransaction(signedTransaction.serialize());
+    console.log("Transaction signed by wallet, sending to network...");
     
-    // Wait for confirmation
-    await connection.confirmTransaction(txid, 'confirmed');
+    // Send and confirm the transaction
+    const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed'
+    });
+    
+    console.log("Transaction sent with ID:", txid);
+    console.log("Waiting for confirmation...");
+    
+    // Wait for confirmation with more detailed options
+    const confirmation = await connection.confirmTransaction({
+      signature: txid,
+      blockhash: blockhash,
+      lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+    }, 'confirmed');
+    
+    console.log("Transaction confirmation:", confirmation);
+    
+    if (confirmation.value.err) {
+      throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
+    }
     
     // Store event data in local storage (in a real app, this would be in a database)
     const eventDataKey = `event-${eventId}`;
