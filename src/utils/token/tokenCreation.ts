@@ -33,6 +33,7 @@ export const createToken = async (
   try {
     // Generate a new keypair for the mint
     const mint = Keypair.generate();
+    console.log('Generated mint keypair:', mint.publicKey.toBase58());
     
     // Set token metadata
     const metadata: TokenMetadata = {
@@ -62,18 +63,14 @@ export const createToken = async (
     // Calculate minimum required lamports for rent exemption
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
     
-    // Add extra SOL to the account to ensure it's properly funded
-    const extraSol = LAMPORTS_PER_SOL * 0.05; // 0.05 SOL extra funding
-    const totalLamports = mintLamports + extraSol;
-    
-    console.log(`Creating mint account with size: ${totalSize}, lamports: ${totalLamports}`);
+    console.log(`Creating mint account with size: ${totalSize}, lamports: ${mintLamports}`);
     
     // Step 1: Create account for the mint with sufficient space allocation
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
       space: totalSize, 
-      lamports: totalLamports,
+      lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
     
@@ -132,11 +129,11 @@ export const createToken = async (
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send the transaction with specific options for better error handling
+      // Send the transaction with preflight checks disabled to get full error logs
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false, // Enable preflight to catch errors before they hit the network
+        skipPreflight: true, // Disable preflight to get full error logs
         preflightCommitment: 'confirmed',
-        maxRetries: 3
+        maxRetries: 5
       });
       
       console.log("Transaction sent with ID:", txid);
@@ -170,7 +167,7 @@ export const createToken = async (
       // Enhanced error handling with detailed log extraction
       console.error('Error sending transaction:', error);
       
-      // Try to extract logs for better error reporting
+      // Extract logs for better error reporting
       let errorMessage = "Transaction failed";
       let errorLogs: string[] = [];
       
@@ -181,7 +178,7 @@ export const createToken = async (
       
       // Check for specific error patterns in the logs
       if (errorLogs.some(log => log.includes('InvalidAccountData'))) {
-        errorMessage = "Token creation failed due to invalid account data. Please check account sizes and initialization order.";
+        errorMessage = "Token creation failed: Invalid account data. Check logs for details.";
       } else if (errorLogs.some(log => log.includes('insufficient funds'))) {
         errorMessage = "Insufficient SOL to complete this operation.";
       } else if (error.message) {

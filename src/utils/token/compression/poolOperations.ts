@@ -5,12 +5,17 @@ import {
   Transaction,
   TransactionInstruction,
   SystemProgram,
-  LAMPORTS_PER_SOL
+  LAMPORTS_PER_SOL,
+  Keypair
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';
 import { createBuffer } from '../../buffer';
 import { toast } from 'sonner';
+import * as bs58 from 'bs58';
+
+// Constants for Light Protocol's programs
+const LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
 
 // Create a token pool for Light Protocol compression
 export const createTokenPool = async (
@@ -25,55 +30,51 @@ export const createTokenPool = async (
     const mintPubkey = new PublicKey(mintAddress);
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate a deterministic address for the token pool based on mint
-    const poolSeed = Buffer.from('token_pool', 'utf-8');
-    const poolAddress = PublicKey.findProgramAddressSync(
+    // In Light Protocol, token pools need to be at a predictable address
+    // Here we generate a deterministic but unique pool address based on mint
+    const poolSeed = Buffer.from(`pool-${mintAddress.substring(0, 8)}`);
+    
+    // Calculate a PDA for the pool account
+    const [poolAddress] = PublicKey.findProgramAddressSync(
       [poolSeed, mintPubkey.toBuffer()],
-      TOKEN_2022_PROGRAM_ID
-    )[0];
+      LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID
+    );
     
     console.log('Token pool address:', poolAddress.toBase58());
     
-    // Calculate space needed for the token pool
-    // In a real implementation with Light Protocol, this would be based on their specifications
-    const poolSize = 1000; 
+    // For token pool, we need larger space allocation
+    const poolSize = 10000; // Generous allocation for token pool data
     const poolLamports = await connection.getMinimumBalanceForRentExemption(poolSize);
     
     // Add extra SOL to ensure the account is properly funded
-    const totalLamports = poolLamports + LAMPORTS_PER_SOL * 0.01;
+    const totalLamports = poolLamports + (LAMPORTS_PER_SOL * 0.02); // 0.02 SOL extra
     
     // Create the token pool transaction
     const transaction = new Transaction();
     
-    // Add instruction to create the pool account
+    // For this demo, we'll create a system account as a placeholder for the token pool
+    const poolKeypair = Keypair.generate();
+    
     transaction.add(
       SystemProgram.createAccount({
         fromPubkey: walletPubkey,
-        newAccountPubkey: poolAddress,
+        newAccountPubkey: poolKeypair.publicKey,
         space: poolSize,
         lamports: totalLamports,
-        programId: TOKEN_2022_PROGRAM_ID
+        programId: LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID
       })
     );
     
-    // Initialize the pool
-    // This simulates a Light Protocol pool initialization
-    transaction.add(
-      new TransactionInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        keys: [
-          { pubkey: poolAddress, isSigner: false, isWritable: true },
-          { pubkey: mintPubkey, isSigner: false, isWritable: false },
-          { pubkey: walletPubkey, isSigner: true, isWritable: true }
-        ],
-        data: createBuffer(Buffer.from([0x07])) // Simulated instruction code
-      })
-    );
+    // In a real Light Protocol implementation, we would also add an instruction
+    // to initialize the pool with the mint. For demo purposes, we're creating a system account.
     
     // Set transaction parameters
     transaction.feePayer = walletPubkey;
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
+    
+    // Partially sign with the pool keypair
+    transaction.partialSign(poolKeypair);
     
     // Have the wallet sign the transaction
     console.log("Requesting wallet signature for pool creation...");
@@ -96,11 +97,15 @@ export const createTokenPool = async (
     
     console.log('Token pool created with tx:', txId);
     
+    // Generate a merkle root for the token pool (simulated for demo)
+    const merkleRoot = bs58.encode(Buffer.from(`root-${Date.now()}`));
+    
     // Store pool information in local storage (for the demo)
     const storageKey = `pool-${mintAddress}`;
     localStorage.setItem(storageKey, JSON.stringify({
-      poolAddress: poolAddress.toBase58(),
+      poolAddress: poolKeypair.publicKey.toBase58(),
       mintAddress,
+      merkleRoot,
       transactionId: txId,
       createdAt: new Date().toISOString()
     }));
@@ -108,7 +113,7 @@ export const createTokenPool = async (
     // Return the transaction ID and merkle root
     return {
       transactionId: txId,
-      merkleRoot: poolAddress.toBase58() // Using pool address as the merkle root for this demo
+      merkleRoot: merkleRoot
     };
   } catch (error: any) {
     console.error('Error creating token pool:', error);
