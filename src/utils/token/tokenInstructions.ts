@@ -9,7 +9,10 @@ import {
   ExtensionType,
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
-  createInitializeInstruction
+  createInitializeInstruction,
+  LENGTH_SIZE,
+  TYPE_SIZE,
+  pack
 } from '@solana/spl-token';
 import { TOKEN_2022_PROGRAM_ID, TokenMetadata } from './types';
 import { BufferPolyfill, createBuffer } from '../buffer';
@@ -24,6 +27,11 @@ export const createMintInstructions = async (
   // Calculate required space and rent for the mint account
   const mintLen = getMintLen([ExtensionType.MetadataPointer]);
   
+  // Calculate the metadata length based on the packed metadata
+  const packedMetadata = pack(metadata);
+  const metadataLen = TYPE_SIZE + LENGTH_SIZE + packedMetadata.length;
+  const totalMintLen = mintLen + metadataLen;
+  
   // Create instructions array
   const instructions: TransactionInstruction[] = [];
   
@@ -32,7 +40,7 @@ export const createMintInstructions = async (
     SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mintKeypair,
-      space: mintLen,
+      space: totalMintLen,
       lamports: 1000000, // Placeholder value, should be calculated in the calling function
       programId: TOKEN_2022_PROGRAM_ID,
     })

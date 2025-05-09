@@ -10,12 +10,15 @@ import {
   createInitializeMintInstruction,
   ExtensionType,
   getMintLen,
-  createInitializeMetadataPointerInstruction
+  createInitializeMetadataPointerInstruction,
+  TOKEN_2022_PROGRAM_ID,
+  LENGTH_SIZE,
+  TYPE_SIZE,
+  pack
 } from '@solana/spl-token';
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import { TOKEN_2022_PROGRAM_ID } from './types';
 
 /**
  * Creates a token with metadata
@@ -61,15 +64,22 @@ export const createToken = async (
     
     console.log(`Creating mint account with calculated space: ${mintLen} bytes`);
     
-    // Calculate minimum required lamports for rent exemption
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+    // Calculate the metadata length based on the packed metadata
+    const packedMetadata = pack(metadata);
+    const metadataLen = TYPE_SIZE + LENGTH_SIZE + packedMetadata.length;
+    const totalMintLen = mintLen + metadataLen;
+    
+    console.log(`Total mint length including metadata: ${totalMintLen} bytes`);
+    
+    // Calculate minimum required lamports for rent exemption based on total size
+    const mintLamports = await connection.getMinimumBalanceForRentExemption(totalMintLen);
     console.log(`Mint lamports required: ${mintLamports}`);
     
     // Step 1: Create account for the mint with correct space allocation
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: mintLen, // Using calculated mint length specifically for the extensions
+      space: totalMintLen, // Using total calculated mint length with metadata
       lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
