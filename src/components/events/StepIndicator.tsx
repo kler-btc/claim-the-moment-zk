@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 type StepIndicatorProps = { 
   stepNumber: number; 
@@ -36,7 +37,7 @@ export const StepIndicator = ({
 export const StepSeparator = ({ active }: { active: boolean }) => {
   return (
     <div className="flex-1 mx-2">
-      <Separator className={active ? 'bg-primary' : 'bg-muted'} />
+      <Separator className={cn(active ? 'bg-primary' : 'bg-muted')} />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { WalletContextProvider } from '@/providers/WalletContextProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { PageLayout } from '@/components/layouts/PageLayout';
@@ -8,9 +8,6 @@ import HomePage from '@/pages/HomePage';
 import CreateEventPage from '@/pages/CreateEventPage';
 import ClaimPage from '@/pages/ClaimPage';
 import NotFound from '@/pages/NotFound';
-
-// Import QueryClient from the same package
-import { QueryClient } from '@tanstack/react-query';
 
 // Create a client
 const queryClient = new QueryClient({
