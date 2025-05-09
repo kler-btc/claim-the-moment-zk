@@ -117,8 +117,9 @@ export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfi
 }
 
 // Create a global Buffer polyfill in browser environments
-if (typeof window !== 'undefined' && typeof (global as any).Buffer === 'undefined') {
-  (global as any).Buffer = {
+// Use window instead of global for browser environments
+if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefined') {
+  (window as any).Buffer = {
     from: (data: number[] | string | Uint8Array, encoding?: string) => {
       const bytes = typeof data === 'string' 
         ? new TextEncoder().encode(data)
