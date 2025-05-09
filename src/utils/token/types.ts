@@ -32,4 +32,4 @@ export interface TransactionSigner {
 
 // Re-export EventDetails from utils/types
 import { EventDetails } from '@/utils/types';
-export { EventDetails };
+export type { EventDetails };
