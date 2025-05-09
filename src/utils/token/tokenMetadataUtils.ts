@@ -13,24 +13,27 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   const symbolSize = metadata.symbol.length;
   const uriSize = metadata.uri.length;
   
-  // Base size for fixed fields
-  let totalSize = 32 + // mint pubkey
-                 4 + nameSize + // name (string length + chars)
-                 4 + symbolSize + // symbol (string length + chars)
-                 4 + uriSize; // uri (string length + chars)
+  // Base size for fixed fields - these are minimums from SPL token spec
+  let totalSize = 82; // Standard mint size
+  
+  // Add size for metadata fields (name, symbol, uri)
+  totalSize += nameSize + symbolSize + uriSize;
   
   // Add space for additional metadata if present
   if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
     for (const [key, value] of metadata.additionalMetadata) {
-      totalSize += 4 + key.length + 4 + value.length; // Each entry has 2 strings
+      totalSize += key.length + value.length + 8; // 8 bytes for length prefixes
     }
     // Account for the array length field
     totalSize += 4;
   }
   
-  // Add buffer to ensure we have enough space for the Token-2022 metadata format
-  // Light Protocol examples suggest a generous buffer - increasing to 500 for safety
-  totalSize += 500;
+  // Add padding for alignment + safety buffer - crucial for proper account sizing
+  // This is needed because Token-2022 has specific layout requirements
+  const paddingSize = 1024; // Using a generous padding to avoid layout issues
+  totalSize += paddingSize;
+  
+  console.log(`Metadata size calculation: Base: 82, Fields: ${nameSize + symbolSize + uriSize}, Additional: ${totalSize - 82 - (nameSize + symbolSize + uriSize) - paddingSize}, Padding: ${paddingSize}`);
   
   return totalSize;
 }

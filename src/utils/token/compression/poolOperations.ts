@@ -24,14 +24,7 @@ export const createTokenPool = async (
     const mintPubkey = new PublicKey(mintAddress);
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Create a transaction for token pool creation
-    // Based on Light Protocol's token pool creation process
-    // Reference: https://www.zkcompression.com/developers/creating-airdrops-with-compressed-tokens
-    
-    // NOTE: In a real implementation, we would use Light Protocol's SDK directly
-    // For this demo, we're creating a simplified version of the token pool creation
-    
-    // 1. Find the token pool program address
+    // Calculate a deterministic address for the token pool based on mint
     const poolSeed = Buffer.from('token_pool', 'utf-8');
     const poolAddress = PublicKey.findProgramAddressSync(
       [poolSeed, mintPubkey.toBuffer()],
@@ -40,44 +33,63 @@ export const createTokenPool = async (
     
     console.log('Token pool address:', poolAddress.toBase58());
     
-    // 2. Calculate space needed for the token pool
-    const poolSize = 1000; // Simplified value
+    // Calculate space needed for the token pool (simplified for demo)
+    // In a real implementation, this would need to be calculated based on Light Protocol specs
+    const poolSize = 1000; 
     const poolLamports = await connection.getMinimumBalanceForRentExemption(poolSize);
     
-    // 3. Create the token pool account
-    // This is a simplified version of the actual createTokenPool instruction from Light Protocol
-    const createPoolInstruction = SystemProgram.createAccount({
-      fromPubkey: walletPubkey,
-      newAccountPubkey: poolAddress,
-      space: poolSize,
-      lamports: poolLamports,
-      programId: TOKEN_2022_PROGRAM_ID
-    });
+    // Create the token pool transaction
+    const transaction = new Transaction();
     
-    // 4. Initialize the token pool account
-    // This would normally use Light Protocol's SDK but we're simulating it
-    const initPoolInstruction = new TransactionInstruction({
-      programId: TOKEN_2022_PROGRAM_ID,
-      keys: [
-        { pubkey: poolAddress, isSigner: false, isWritable: true },
-        { pubkey: mintPubkey, isSigner: false, isWritable: false },
-        { pubkey: walletPubkey, isSigner: true, isWritable: true }
-      ],
-      data: createBuffer(Buffer.from([0x07])) // Fake instruction code for demo
-    });
+    // Add instruction to create the pool account
+    // Note: In a real implementation with Light Protocol, this would use their SDK methods
+    transaction.add(
+      SystemProgram.createAccount({
+        fromPubkey: walletPubkey,
+        newAccountPubkey: poolAddress,
+        space: poolSize,
+        lamports: poolLamports,
+        programId: TOKEN_2022_PROGRAM_ID
+      })
+    );
     
-    // 5. Create and sign the transaction
-    const tx = new Transaction().add(createPoolInstruction, initPoolInstruction);
-    tx.feePayer = walletPubkey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    // Initialize the pool (simplified for demo)
+    // This simulates a Light Protocol pool initialization
+    transaction.add(
+      new TransactionInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        keys: [
+          { pubkey: poolAddress, isSigner: false, isWritable: true },
+          { pubkey: mintPubkey, isSigner: false, isWritable: false },
+          { pubkey: walletPubkey, isSigner: true, isWritable: true }
+        ],
+        data: createBuffer(Buffer.from([0x07])) // Simulated instruction code
+      })
+    );
     
-    const signedTx = await signTransaction(tx);
+    // Set transaction parameters
+    transaction.feePayer = walletPubkey;
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = blockhash;
+    
+    // Have the wallet sign the transaction
+    console.log("Requesting wallet signature for pool creation...");
+    const signedTx = await signTransaction(transaction);
+    
+    console.log("Transaction signed, sending to network...");
     const txId = await connection.sendRawTransaction(signedTx.serialize());
-    await connection.confirmTransaction(txId, 'confirmed');
+    
+    // Wait for confirmation
+    console.log("Waiting for transaction confirmation...");
+    await connection.confirmTransaction({
+      signature: txId,
+      blockhash: blockhash,
+      lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+    }, 'confirmed');
     
     console.log('Token pool created with tx:', txId);
     
-    // Store pool information in local storage for the demo
+    // Store pool information in local storage (for the demo)
     const storageKey = `pool-${mintAddress}`;
     localStorage.setItem(storageKey, JSON.stringify({
       poolAddress: poolAddress.toBase58(),
@@ -87,10 +99,9 @@ export const createTokenPool = async (
     }));
 
     // Return the transaction ID and merkle root
-    // In a real implementation, we would get the merkle root from the transaction result
     return {
       transactionId: txId,
-      merkleRoot: poolAddress.toBase58() // Using pool address as a stand-in for merkle root
+      merkleRoot: poolAddress.toBase58() // Using pool address as the merkle root for simplicity
     };
   } catch (error) {
     console.error('Error creating token pool:', error);

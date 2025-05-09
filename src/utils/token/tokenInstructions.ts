@@ -13,7 +13,7 @@ import {
 } from '@solana/spl-token';
 import { TOKEN_2022_PROGRAM_ID, TokenMetadata } from './types';
 import { BufferPolyfill, createBuffer } from '../buffer';
-import { calculateMetadataSize, serializeMetadata } from './tokenMetadataUtils';
+import { calculateMetadataSize } from './tokenMetadataUtils';
 
 // Helper to create mint instructions
 export const createMintInstructions = async (
@@ -22,43 +22,41 @@ export const createMintInstructions = async (
   decimals: number,
   metadata: TokenMetadata
 ): Promise<TransactionInstruction[]> => {
-  // Calculate required space and rent for the mint account
-  // Only use MetadataPointer extension to avoid "Cannot get type length for variable extension type: 19" error
+  // Calculate required space for a proper Token-2022 mint with metadata
   const extensions = [ExtensionType.MetadataPointer];
-  const mintLen = getMintLen(extensions);
+  const baseMintLen = getMintLen(extensions);
   
-  // Calculate the metadata size using our serialization helper
-  const serializedMetadata = serializeMetadata(metadata);
-  const metadataSize = serializedMetadata.length;
+  // Calculate the additional space needed for metadata
+  const metadataSize = calculateMetadataSize(metadata);
   
-  // Total space needed for the mint account with extra padding for safety
-  const totalMintLen = mintLen + metadataSize + 500;
+  // Total space needed for the mint account
+  const totalMintLen = baseMintLen + metadataSize;
   
   // Create instructions array
   const instructions: TransactionInstruction[] = [];
   
-  // Add instruction to create mint account
+  // Add instruction to create mint account with adequate space
   instructions.push(
     SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mintKeypair,
-      space: totalMintLen,
-      lamports: 1000000, // Placeholder value, should be calculated in the calling function
+      space: totalMintLen, // Using calculated size
+      lamports: 1000000, // Placeholder - actual value should be calculated via getMinimumBalanceForRentExemption
       programId: TOKEN_2022_PROGRAM_ID,
     })
   );
   
-  // Initialize metadata pointer extension
+  // Initialize metadata pointer extension - this must come before mint initialization
   instructions.push(
     createInitializeMetadataPointerInstruction(
       mintKeypair, 
       walletPubkey,  // payer/update authority
-      mintKeypair, // metadata address
+      mintKeypair, // metadata address (pointing to self in this example)
       TOKEN_2022_PROGRAM_ID
     )
   );
   
-  // Initialize the mint with decimals
+  // Initialize the mint with decimals - this comes after the extension initialization
   instructions.push(
     createInitializeMintInstruction(
       mintKeypair, 
@@ -69,7 +67,7 @@ export const createMintInstructions = async (
     )
   );
   
-  // Add metadata initialization
+  // Add metadata initialization - this must come after mint initialization
   instructions.push(
     createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,

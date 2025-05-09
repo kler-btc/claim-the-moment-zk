@@ -16,7 +16,7 @@ import {
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import { calculateMetadataSize, serializeMetadata } from './tokenMetadataUtils';
+import { calculateMetadataSize } from './tokenMetadataUtils';
 
 /**
  * Creates a token with metadata
@@ -56,25 +56,24 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate space needed for mint - IMPORTANT: Only use supported extensions
-    // The error "Cannot get type length for variable extension type: 19" occurs because
-    // ExtensionType.TokenMetadata (value 19) is not properly supported in this version
-    // Using only MetadataPointer extension which is supported
+    // Calculate proper space for the mint account
+    // We need to calculate the space for metadata extensions separately and correctly
     const extensions = [ExtensionType.MetadataPointer];
-    const mintLen = getMintLen(extensions);
+    const baseMintLen = getMintLen(extensions);
     
-    console.log(`Base mint length with MetadataPointer extension: ${mintLen} bytes`);
+    console.log(`Base mint length with MetadataPointer extension: ${baseMintLen} bytes`);
     
-    // Serialize the metadata to calculate its size
-    const serializedMetadata = serializeMetadata(metadata);
-    const metadataSize = serializedMetadata.length;
-    console.log(`Serialized metadata size: ${metadataSize} bytes`);
+    // Calculate minimum required lamports for rent exemption
+    // Important: We need to calculate the correct space for the mint account including metadata
+    const metadataSize = calculateMetadataSize(metadata);
+    console.log(`Calculated metadata size: ${metadataSize} bytes`);
     
-    // Total space needed for the mint account with generous padding
-    const totalSize = mintLen + metadataSize + 500; 
+    // CORRECTION: Token-2022 requires metadata to be stored in a separate account
+    // For this simple example, we'll store metadata in the mint account itself
+    // But we need to ensure it has enough space
+    const totalSize = baseMintLen + metadataSize;
     console.log(`Total allocated size: ${totalSize} bytes`);
     
-    // Calculate minimum required lamports for rent exemption based on total size
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
     console.log(`Mint lamports required: ${mintLamports}`);
     
