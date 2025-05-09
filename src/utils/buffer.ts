@@ -22,13 +22,15 @@ export class BufferPolyfill {
     }
   }
 
-  static from(data: number[] | string, encoding?: string): BufferPolyfill {
+  static from(data: number[] | string | Uint8Array, encoding?: string): BufferPolyfill {
     if (Array.isArray(data)) {
       return new BufferPolyfill(data);
     } else if (typeof data === 'string') {
       // Convert string to byte array
       const encoder = new TextEncoder();
       return new BufferPolyfill(encoder.encode(data));
+    } else if (data instanceof Uint8Array) {
+      return new BufferPolyfill(data);
     }
     return new BufferPolyfill();
   }
@@ -38,40 +40,57 @@ export class BufferPolyfill {
     return this.data;
   }
 
-  // Convert to Buffer for Solana compatibility
-  toBuffer(): Buffer {
-    return Buffer.from(this.data);
+  // For compatibility with Buffer methods
+  write(string: string, offset?: number): number {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(string);
+    const targetOffset = offset || 0;
+    
+    // Copy bytes to the buffer at specified offset
+    for (let i = 0; i < bytes.length; i++) {
+      this.data[targetOffset + i] = bytes[i];
+    }
+    
+    return bytes.length;
   }
 
-  // Make it array-like
-  [index: number]: number;
+  toString(encoding?: string): string {
+    const decoder = new TextDecoder();
+    return decoder.decode(this.data);
+  }
 
+  // Array-like indexed access
+  [index: number]: number;
+  
   // Allow length property
   get length(): number {
     return this.data.length;
   }
 }
 
-// Create a helper function to convert BufferPolyfill or Uint8Array to Buffer
-export function toBuffer(data: BufferPolyfill | Uint8Array | number[]): Buffer {
+// Create a helper function to convert BufferPolyfill or Uint8Array to Buffer-like object
+export function toBuffer(data: BufferPolyfill | Uint8Array | number[]): Uint8Array {
   if (data instanceof BufferPolyfill) {
-    return Buffer.from(data.bytes);
+    return data.bytes;
   } else if (data instanceof Uint8Array) {
-    return Buffer.from(data);
-  } else if (Array.isArray(data)) {
-    return Buffer.from(data);
-  }
-  return Buffer.from([]);
-}
-
-// Create a factory function to mimic Node's Buffer.from()
-export function createBuffer(data: number[] | string | Uint8Array, encoding?: string): Uint8Array {
-  if (typeof data === 'string') {
-    const encoder = new TextEncoder();
-    return encoder.encode(data);
+    return data;
   } else if (Array.isArray(data)) {
     return new Uint8Array(data);
-  } else {
-    return data;
   }
+  return new Uint8Array();
+}
+
+// Create a global Buffer polyfill in browser environments
+if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefined') {
+  (window as any).Buffer = {
+    from: (data: number[] | string | Uint8Array, encoding?: string) => {
+      const bufferPoly = BufferPolyfill.from(data, encoding);
+      return bufferPoly.bytes;
+    }
+  };
+}
+
+// Helper function to create Buffer-like objects
+export function createBuffer(data: number[] | string | Uint8Array, encoding?: string): Uint8Array {
+  return toBuffer(BufferPolyfill.from(data, encoding));
 }

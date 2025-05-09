@@ -8,7 +8,7 @@ import {
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';
 import { CompressedTokenProgram } from './programs';
-import { toBuffer } from '../../buffer';
+import { createBuffer } from '../../buffer';
 
 // Create a token pool for Light Protocol compression
 export const createTokenPool = async (
@@ -34,7 +34,7 @@ export const createTokenPool = async (
     const poolInstruction = new TransactionInstruction({
       programId: poolInstructionData.programId,
       keys: poolInstructionData.keys,
-      data: poolInstructionData.data // This is now a proper Buffer
+      data: poolInstructionData.data // This is now a Buffer-compatible Uint8Array
     });
     
     // Create and sign the transaction
