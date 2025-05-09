@@ -111,6 +111,7 @@ export const createToken = async (
     );
     
     // Initialize metadata for the token - create with standard properties (no additionalMetadata)
+    // Note: additionalMetadata is not supported in the createInitializeInstruction interface
     const initializeMetadataInstruction = createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
