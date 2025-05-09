@@ -1,9 +1,9 @@
 
-import { WalletButton } from '../WalletButton';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { WalletButton } from '../WalletButton';
 
-export const SiteHeader = () => {
+export const SiteHeader: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (

@@ -1,4 +1,5 @@
 
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { WalletContextProvider } from '@/providers/WalletContextProvider';
@@ -27,8 +28,8 @@ function App() {
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
+          <Toaster />
         </Router>
-        <Toaster />
       </WalletContextProvider>
     </QueryClientProvider>
   );
