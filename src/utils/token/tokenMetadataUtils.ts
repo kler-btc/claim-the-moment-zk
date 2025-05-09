@@ -8,49 +8,34 @@ import { TokenMetadata } from './types';
  * @returns The size in bytes required for the metadata
  */
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
-  // In Token-2022, the account layout is very specific
-  // We need to ensure we have enough space for all extensions
+  // For SPL Token-2022 with metadata extension, we need precise size allocation
   
-  // Base size for a mint account with no extensions
+  // 1. Base mint account size with no extensions
   const BASE_MINT_SIZE = 82;
   
-  // Size needed for MetadataPointer extension (type, length, and AuthorityInfo)
-  const METADATA_POINTER_SIZE = 1 + 2 + 32 + 1;
+  // 2. MetadataPointer extension overhead
+  // TLV header (type, length) + authority + padding
+  const METADATA_POINTER_EXTENSION_SIZE = 1 + 2 + 33;
   
-  // Size for the actual metadata (calculated from fields)
-  const nameSize = metadata.name.length;
-  const symbolSize = metadata.symbol.length;
-  const uriSize = metadata.uri.length;
+  // 3. Metadata fields size
+  // Using maximum sizes to ensure enough space
+  const MAX_NAME_LENGTH = 32;
+  const MAX_SYMBOL_LENGTH = 10;
+  const MAX_URI_LENGTH = 200;
   
-  // Calculate additional metadata size
-  let additionalMetadataSize = 0;
+  // 4. Total metadata size with padding for TLV headers and extra fields
+  const METADATA_SIZE = 8 + MAX_NAME_LENGTH + 4 + MAX_SYMBOL_LENGTH + 4 + MAX_URI_LENGTH + 100;
+  
+  // For additional metadata fields, add extra space
+  let ADDITIONAL_METADATA_SIZE = 0;
   if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
-    for (const [key, value] of metadata.additionalMetadata) {
-      additionalMetadataSize += key.length + value.length + 8; // 8 bytes for length prefixes
-    }
-    // Account for the array length field
-    additionalMetadataSize += 4;
+    ADDITIONAL_METADATA_SIZE = 200; // Conservative allocation
   }
   
-  // The Token Metadata layout has specific size requirements
-  // We need to add the size for TlvIndices, type, length fields, etc.
-  const METADATA_HEADER_SIZE = 20; // Approximate size for headers
-  const metadataContentSize = nameSize + symbolSize + uriSize + additionalMetadataSize;
+  // Calculate total size with generous padding
+  const totalSize = BASE_MINT_SIZE + METADATA_POINTER_EXTENSION_SIZE + METADATA_SIZE + ADDITIONAL_METADATA_SIZE + 1000;
   
-  // Total size with generous padding to ensure we have enough space
-  const totalSize = BASE_MINT_SIZE + METADATA_POINTER_SIZE + METADATA_HEADER_SIZE + metadataContentSize + 2048;
-  
-  console.log(`Calculated mint account size components:
-    Base Mint Size: ${BASE_MINT_SIZE}
-    MetadataPointer Size: ${METADATA_POINTER_SIZE}
-    Metadata Header Size: ${METADATA_HEADER_SIZE}
-    Name Size: ${nameSize}
-    Symbol Size: ${symbolSize}
-    URI Size: ${uriSize}
-    Additional Metadata Size: ${additionalMetadataSize}
-    Extra Padding: 2048
-    Total Size: ${totalSize}
-  `);
+  console.log(`Calculated mint account size: ${totalSize} bytes`);
   
   return totalSize;
 }

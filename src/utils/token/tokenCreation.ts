@@ -56,25 +56,17 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate proper space for the mint account
-    // We need to calculate the space for metadata extensions separately and correctly
-    const extensions = [ExtensionType.MetadataPointer];
-    const baseMintLen = getMintLen(extensions);
-    
-    console.log(`Base mint length with MetadataPointer extension: ${baseMintLen} bytes`);
-    
-    // Calculate the total size needed for the account, including metadata
+    // Calculate adequate space for the mint account including all extensions
     const totalSize = calculateMetadataSize(metadata);
-    console.log(`Total allocated size: ${totalSize} bytes`);
     
     // Calculate minimum required lamports for rent exemption
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
-    console.log(`Mint lamports required: ${mintLamports}`);
     
     // Add extra SOL to the account to ensure it's properly funded
     const extraSol = LAMPORTS_PER_SOL * 0.05; // 0.05 SOL extra funding
     const totalLamports = mintLamports + extraSol;
-    console.log(`Total lamports allocated (with extra funding): ${totalLamports}`);
+    
+    console.log(`Creating mint account with size: ${totalSize}, lamports: ${totalLamports}`);
     
     // Step 1: Create account for the mint with sufficient space allocation
     const createAccountInstruction = SystemProgram.createAccount({
@@ -82,7 +74,7 @@ export const createToken = async (
       newAccountPubkey: mint.publicKey,
       space: totalSize, 
       lamports: totalLamports,
-      programId: TOKEN_2022_PROGRAM_ID // FIXED: Use the correct TOKEN_2022_PROGRAM_ID
+      programId: TOKEN_2022_PROGRAM_ID
     });
     
     // Step 2: Initialize the MetadataPointer extension
@@ -90,7 +82,7 @@ export const createToken = async (
       mint.publicKey,
       walletPubkey,
       mint.publicKey, // Point to self for metadata
-      TOKEN_2022_PROGRAM_ID // FIXED: Use the correct TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID
     );
     
     // Step 3: Initialize the mint with decimals
@@ -100,12 +92,12 @@ export const createToken = async (
       decimals,
       walletPubkey, // Mint authority
       null, // Freeze authority (null = no freeze)
-      TOKEN_2022_PROGRAM_ID // FIXED: Use the correct TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID
     );
     
     // Step 4: Initialize metadata for the token
     const initializeMetadataInstruction = createInitializeInstruction({
-      programId: TOKEN_2022_PROGRAM_ID, // FIXED: Use the correct TOKEN_2022_PROGRAM_ID
+      programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
       metadata: mint.publicKey,
       name: metadata.name,
@@ -123,7 +115,7 @@ export const createToken = async (
       initializeMetadataInstruction
     );
     
-    // Set fee payer and recent blockhash
+    // Set fee payer
     transaction.feePayer = walletPubkey;
     
     try {
@@ -178,23 +170,25 @@ export const createToken = async (
       // Enhanced error handling with detailed log extraction
       console.error('Error sending transaction:', error);
       
-      // Try to extract and log detailed error information
+      // Try to extract logs for better error reporting
+      let errorMessage = "Transaction failed";
+      let errorLogs: string[] = [];
+      
       if (error.logs) {
-        console.error('Transaction log details:', error.logs);
-      } else if (error.message && error.message.includes('Transaction simulation failed')) {
-        // Extract logs from the error message if possible
-        const logMatch = error.message.match(/Logs:\s*(\[.*?\])/);
-        if (logMatch && logMatch[1]) {
-          try {
-            const logs = JSON.parse(logMatch[1]);
-            console.error('Extracted logs from error:', logs);
-          } catch (parseError) {
-            console.error('Could not parse logs from error message');
-          }
-        }
+        errorLogs = error.logs;
+        console.error('Transaction log details:', errorLogs.join('\n'));
       }
       
-      throw error;
+      // Check for specific error patterns in the logs
+      if (errorLogs.some(log => log.includes('InvalidAccountData'))) {
+        errorMessage = "Token creation failed due to invalid account data. Please check account sizes and initialization order.";
+      } else if (errorLogs.some(log => log.includes('insufficient funds'))) {
+        errorMessage = "Insufficient SOL to complete this operation.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error('Error creating token:', error);
