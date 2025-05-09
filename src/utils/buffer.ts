@@ -38,6 +38,11 @@ export class BufferPolyfill {
     return this.data;
   }
 
+  // Convert to Buffer for Solana compatibility
+  toBuffer(): Buffer {
+    return Buffer.from(this.data);
+  }
+
   // Make it array-like
   [index: number]: number;
 
@@ -45,6 +50,18 @@ export class BufferPolyfill {
   get length(): number {
     return this.data.length;
   }
+}
+
+// Create a helper function to convert BufferPolyfill or Uint8Array to Buffer
+export function toBuffer(data: BufferPolyfill | Uint8Array | number[]): Buffer {
+  if (data instanceof BufferPolyfill) {
+    return Buffer.from(data.bytes);
+  } else if (data instanceof Uint8Array) {
+    return Buffer.from(data);
+  } else if (Array.isArray(data)) {
+    return Buffer.from(data);
+  }
+  return Buffer.from([]);
 }
 
 // Create a factory function to mimic Node's Buffer.from()

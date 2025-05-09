@@ -9,6 +9,7 @@ import {
 } from '@solana/web3.js';
 import { TransactionSigner } from '../types';
 import { CompressedTokenProgram } from './programs';
+import { toBuffer } from '../../buffer';
 
 // Compress tokens to the state tree
 export const compress = async (
@@ -36,11 +37,11 @@ export const compress = async (
     // Get the instruction data
     const compressInstructionData = CompressedTokenProgram.compress(compressParams);
     
-    // Create a proper TransactionInstruction object
+    // Create a proper TransactionInstruction object with Buffer data
     const compressInstruction = new TransactionInstruction({
       programId: compressInstructionData.programId,
       keys: compressInstructionData.keys,
-      data: compressInstructionData.data
+      data: compressInstructionData.data // This is now a proper Buffer
     });
     
     // Build transaction
