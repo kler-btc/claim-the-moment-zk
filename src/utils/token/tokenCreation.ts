@@ -56,19 +56,20 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate space needed for mint with correct extensions
-    // IMPORTANT: Only include the MetadataPointer extension here
-    // The actual metadata will be stored in the same account but isn't part of the mint extension calculation
-    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+    // Calculate space needed for mint with both required extensions
+    // Based on Light Protocol documentation, we need BOTH extensions
+    const extensions = [ExtensionType.MetadataPointer, ExtensionType.TokenMetadata];
+    const mintLen = getMintLen(extensions);
     
-    console.log(`Base mint length with MetadataPointer: ${mintLen} bytes`);
+    console.log(`Base mint length with extensions: ${mintLen} bytes`);
     
     // Calculate additional space needed for metadata
     const metadataSize = calculateMetadataSize(metadata);
     console.log(`Additional metadata size: ${metadataSize} bytes`);
     
     // Total space needed for the mint account
-    const totalSize = mintLen + metadataSize + 100; // Add padding for safety
+    // Adding extra padding to ensure sufficient space
+    const totalSize = mintLen + metadataSize + 200; 
     console.log(`Total allocated size: ${totalSize} bytes`);
     
     // Calculate minimum required lamports for rent exemption based on total size

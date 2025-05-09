@@ -23,13 +23,15 @@ export const createMintInstructions = async (
   metadata: TokenMetadata
 ): Promise<TransactionInstruction[]> => {
   // Calculate required space and rent for the mint account
-  const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+  // Include both required extensions for Token-2022 compatibility
+  const extensions = [ExtensionType.MetadataPointer, ExtensionType.TokenMetadata];
+  const mintLen = getMintLen(extensions);
   
   // Calculate the metadata size
   const metadataSize = calculateMetadataSize(metadata);
   
-  // Total space needed for the mint account
-  const totalMintLen = mintLen + metadataSize + 100; // Add padding for safety
+  // Total space needed for the mint account with extra padding for safety
+  const totalMintLen = mintLen + metadataSize + 200;
   
   // Create instructions array
   const instructions: TransactionInstruction[] = [];
