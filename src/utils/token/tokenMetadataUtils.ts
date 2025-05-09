@@ -28,8 +28,9 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
     totalSize += 4;
   }
   
-  // Add some buffer to ensure we have enough space
-  totalSize += 100;
+  // Add buffer to ensure we have enough space for the Token-2022 metadata format
+  // This is much more than needed but ensures we won't run into space issues
+  totalSize += 200;
   
   return totalSize;
 }

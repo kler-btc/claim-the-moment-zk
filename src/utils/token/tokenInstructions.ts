@@ -25,9 +25,11 @@ export const createMintInstructions = async (
   // Calculate required space and rent for the mint account
   const mintLen = getMintLen([ExtensionType.MetadataPointer]);
   
-  // Calculate the metadata length based on our utility function
-  const metadataLen = METADATA_TYPE_SIZE + METADATA_LENGTH_SIZE + calculateMetadataSize(metadata);
-  const totalMintLen = mintLen + metadataLen;
+  // Calculate the metadata size
+  const metadataSize = calculateMetadataSize(metadata);
+  
+  // Total space needed for the mint account
+  const totalMintLen = mintLen + metadataSize + 100; // Add padding for safety
   
   // Create instructions array
   const instructions: TransactionInstruction[] = [];

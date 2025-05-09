@@ -57,32 +57,34 @@ export const createToken = async (
     const walletPubkey = new PublicKey(walletAddress);
     
     // Calculate space needed for mint with correct extensions
-    const extensions = [ExtensionType.MetadataPointer];
-    const mintLen = getMintLen(extensions);
+    // IMPORTANT: Only include the MetadataPointer extension here
+    // The actual metadata will be stored in the same account but isn't part of the mint extension calculation
+    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
     
-    console.log(`Creating mint account with calculated space: ${mintLen} bytes`);
+    console.log(`Base mint length with MetadataPointer: ${mintLen} bytes`);
     
-    // Calculate the metadata length based on our utility function
-    const metadataLen = METADATA_TYPE_SIZE + METADATA_LENGTH_SIZE + calculateMetadataSize(metadata);
-    const totalMintLen = mintLen + metadataLen;
+    // Calculate additional space needed for metadata
+    const metadataSize = calculateMetadataSize(metadata);
+    console.log(`Additional metadata size: ${metadataSize} bytes`);
     
-    console.log(`Total mint length including metadata: ${totalMintLen} bytes`);
+    // Total space needed for the mint account
+    const totalSize = mintLen + metadataSize + 100; // Add padding for safety
+    console.log(`Total allocated size: ${totalSize} bytes`);
     
     // Calculate minimum required lamports for rent exemption based on total size
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(totalMintLen);
+    const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
     console.log(`Mint lamports required: ${mintLamports}`);
     
-    // Step 1: Create account for the mint with correct space allocation
+    // Step 1: Create account for the mint with sufficient space allocation
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: totalMintLen, // Using total calculated mint length with metadata
+      space: totalSize, 
       lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
     
     // Step 2: Initialize the MetadataPointer extension
-    // This allows the mint to point to itself for metadata
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
       mint.publicKey,
       walletPubkey,
