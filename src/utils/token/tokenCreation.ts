@@ -14,8 +14,7 @@ import {
   createInitializeMetadataPointerInstruction,
   TYPE_SIZE,
   LENGTH_SIZE,
-  createInitializeInstruction,
-  pack
+  createInitializeInstruction
 } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
@@ -64,20 +63,21 @@ export const createToken = async (
     const extensions = [ExtensionType.MetadataPointer];
     const mintLen = getMintLen(extensions);
     
-    // Calculate metadata size - use pack for accurate measurement
-    let additionalMetadataData: Buffer[] = [];
-    if (metadata.additionalMetadata) {
-      additionalMetadataData = metadata.additionalMetadata.map(([key, value]) => {
-        return Buffer.concat([
-          Buffer.from(key),
-          Buffer.from(value)
-        ]);
-      });
-    }
+    // Calculate metadata size - manually estimate size since no pack function is available
+    // Let's allocate extra space to ensure we have enough room for metadata
+    const estimatedAdditionalMetadataSize = metadata.additionalMetadata ? 
+      metadata.additionalMetadata.reduce((acc, [key, value]) => acc + key.length + value.length + 2, 0) : 0;
+    
+    const estimatedMetadataSize = 
+      metadata.name.length + 
+      metadata.symbol.length + 
+      metadata.uri.length + 
+      estimatedAdditionalMetadataSize +
+      100; // Extra buffer space
     
     // Calculate minimum required lamports for rent exemption
     // Allocate extra space to ensure enough room for metadata
-    const baseSpace = mintLen + 1024; // Add extra space for metadata
+    const baseSpace = mintLen + estimatedMetadataSize + 1024; // Add extra space for metadata
     const mintLamports = await connection.getMinimumBalanceForRentExemption(baseSpace);
 
     console.log(`Creating mint account with space: ${baseSpace} bytes`);
@@ -110,7 +110,7 @@ export const createToken = async (
       TOKEN_2022_PROGRAM_ID
     );
     
-    // Initialize metadata for the token
+    // Initialize metadata for the token - create with standard properties (no additionalMetadata)
     const initializeMetadataInstruction = createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
@@ -119,8 +119,7 @@ export const createToken = async (
       symbol: metadata.symbol,
       uri: metadata.uri,
       mintAuthority: walletPubkey,
-      updateAuthority: walletPubkey,
-      additionalMetadata: metadata.additionalMetadata || []
+      updateAuthority: walletPubkey
     });
     
     // Add all instructions to the transaction IN THE CORRECT ORDER
