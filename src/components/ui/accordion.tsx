@@ -9,32 +9,31 @@ import { cn } from "@/lib/utils"
 
 const Accordion = AccordionPrimitive.Root
 
-interface AccordionItemProps extends React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item> {
+type AccordionItemProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item> & {
   className?: string;
 }
 
 const AccordionItem = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Item>,
   AccordionItemProps
->((props, ref) => (
+>(({ className, ...props }, ref) => (
   <AccordionPrimitive.Item
     ref={ref}
-    className={cn("border-b", props.className)}
+    className={cn("border-b", className)}
     {...props}
   />
 ))
 AccordionItem.displayName = "AccordionItem"
 
-interface AccordionTriggerProps extends React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> {
+type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
   className?: string;
-  children: React.ReactNode;
 }
 
 const AccordionTrigger = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Trigger>,
   AccordionTriggerProps
 >(({ className, children, ...props }, ref) => (
-  <AccordionPrimitive.Header className="flex">
+  <AccordionPrimitive.Header>
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
@@ -50,9 +49,8 @@ const AccordionTrigger = React.forwardRef<
 ))
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName
 
-interface AccordionContentProps extends React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content> {
+type AccordionContentProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content> & {
   className?: string;
-  children: React.ReactNode;
 }
 
 const AccordionContent = React.forwardRef<

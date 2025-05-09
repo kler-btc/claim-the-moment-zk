@@ -38,7 +38,7 @@ const CreateEventForm = ({
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Event Name</Label>
+            <Label>Event Name</Label>
             <Input
               id="title"
               name="title"
@@ -51,7 +51,7 @@ const CreateEventForm = ({
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
+              <Label>Location</Label>
               <Input
                 id="location"
                 name="location"
@@ -64,7 +64,7 @@ const CreateEventForm = ({
             
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
+                <Label>Date</Label>
                 <Input
                   id="date"
                   name="date"
@@ -75,7 +75,7 @@ const CreateEventForm = ({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="time">Time</Label>
+                <Label>Time</Label>
                 <Input
                   id="time"
                   name="time"
@@ -89,7 +89,7 @@ const CreateEventForm = ({
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label>Description</Label>
             <Textarea
               id="description"
               name="description"
@@ -103,7 +103,7 @@ const CreateEventForm = ({
           {/* New Token Metadata Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="symbol">Token Symbol</Label>
+              <Label>Token Symbol</Label>
               <Input
                 id="symbol"
                 name="symbol"
@@ -118,7 +118,7 @@ const CreateEventForm = ({
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="decimals">Token Decimals</Label>
+              <Label>Token Decimals</Label>
               <Input
                 id="decimals"
                 name="decimals"
@@ -137,7 +137,7 @@ const CreateEventForm = ({
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Token Image URL</Label>
+            <Label>Token Image URL</Label>
             <Input
               id="imageUrl"
               name="imageUrl"
@@ -153,7 +153,7 @@ const CreateEventForm = ({
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="attendeeCount">Number of Attendees (Token Supply)</Label>
+            <Label>Number of Attendees (Token Supply)</Label>
             <Input
               id="attendeeCount"
               name="attendeeCount"
