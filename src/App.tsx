@@ -1,6 +1,6 @@
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { createQueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WalletContextProvider } from '@/providers/WalletContextProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { PageLayout } from '@/components/layouts/PageLayout';
@@ -10,7 +10,7 @@ import ClaimPage from '@/pages/ClaimPage';
 import NotFound from '@/pages/NotFound';
 
 // Create a client
-const queryClient = createQueryClient({
+const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60 * 1000, // 1 minute
