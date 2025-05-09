@@ -9,8 +9,8 @@ import CreateEventPage from '@/pages/CreateEventPage';
 import ClaimPage from '@/pages/ClaimPage';
 import NotFound from '@/pages/NotFound';
 
-// Create a client using direct import from package
-const { QueryClient } = require('@tanstack/react-query');
+// Import QueryClient directly to avoid any import issues
+import { QueryClient } from '@tanstack/react-query';
 
 // Create a client
 const queryClient = new QueryClient({
