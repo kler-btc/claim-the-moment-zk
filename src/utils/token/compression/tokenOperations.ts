@@ -41,7 +41,7 @@ export const compress = async (
     const compressInstruction = new TransactionInstruction({
       programId: compressInstructionData.programId,
       keys: compressInstructionData.keys,
-      data: compressInstructionData.data as Buffer
+      data: compressInstructionData.data
     });
     
     // Build transaction

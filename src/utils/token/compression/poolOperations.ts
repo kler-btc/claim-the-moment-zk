@@ -34,7 +34,7 @@ export const createTokenPool = async (
     const poolInstruction = new TransactionInstruction({
       programId: poolInstructionData.programId,
       keys: poolInstructionData.keys,
-      data: poolInstructionData.data as Buffer
+      data: poolInstructionData.data
     });
     
     // Create and sign the transaction

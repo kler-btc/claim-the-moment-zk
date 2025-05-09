@@ -95,7 +95,7 @@ export class BufferPolyfill {
 }
 
 // This helper function creates a buffer that will be compatible with @solana/web3.js
-export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfill): Buffer {
+export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfill): Buffer | Uint8Array {
   if (typeof Buffer !== 'undefined') {
     // Node.js environment - use real Buffer
     if (data instanceof BufferPolyfill) {
@@ -105,47 +105,13 @@ export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfi
                        typeof data === 'string' ? new TextEncoder().encode(data) : 
                        data);
   } else {
-    // Browser environment - create Buffer-like object
+    // Browser environment - create Uint8Array to use instead of Buffer
     const bufferData = data instanceof BufferPolyfill ? data.bytes :
                       data instanceof Uint8Array ? data :
                       typeof data === 'string' ? new TextEncoder().encode(data) :
                       new Uint8Array(data);
     
-    // Create a Buffer-compatible object
-    const bufferObj = Object.create(Buffer.prototype);
-    const uint8Array = bufferData instanceof Uint8Array ? bufferData : new Uint8Array(bufferData);
-    
-    // Copy Uint8Array methods/properties to our Buffer object
-    Object.defineProperty(bufferObj, 'buffer', {
-      value: uint8Array.buffer,
-      enumerable: false,
-      writable: false
-    });
-    
-    Object.defineProperty(bufferObj, 'byteLength', {
-      value: uint8Array.byteLength,
-      enumerable: false,
-      writable: false
-    });
-    
-    Object.defineProperty(bufferObj, 'byteOffset', {
-      value: uint8Array.byteOffset,
-      enumerable: false,
-      writable: false
-    });
-    
-    Object.defineProperty(bufferObj, 'length', {
-      value: uint8Array.length,
-      enumerable: false,
-      writable: false
-    });
-    
-    // Copy the bytes to the Buffer object
-    for (let i = 0; i < uint8Array.length; i++) {
-      bufferObj[i] = uint8Array[i];
-    }
-    
-    return bufferObj as Buffer;
+    return bufferData;
   }
 }
 
@@ -156,7 +122,7 @@ if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefine
       return createBuffer(data);
     },
     alloc: (size: number) => {
-      return createBuffer(new Uint8Array(size));
+      return new Uint8Array(size);
     },
     isBuffer: (obj: any) => {
       return obj instanceof Uint8Array || 
