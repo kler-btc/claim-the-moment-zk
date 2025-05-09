@@ -29,8 +29,8 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   }
   
   // Add buffer to ensure we have enough space for the Token-2022 metadata format
-  // Based on Light Protocol examples, we're adding a generous buffer
-  totalSize += 300;
+  // Light Protocol examples suggest a generous buffer - increasing to 500 for safety
+  totalSize += 500;
   
   return totalSize;
 }
@@ -42,7 +42,7 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
  * @returns The serialized metadata
  */
 export const serializeMetadata = (metadata: TokenMetadata): Uint8Array => {
-  // For implementation simplicity, we just convert to JSON and use that
+  // For implementation simplicity, we convert to JSON and use that
   // This isn't the actual binary format used by Token-2022, but works for size estimation
   const jsonString = JSON.stringify({
     name: metadata.name,

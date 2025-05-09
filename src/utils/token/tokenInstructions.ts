@@ -13,7 +13,7 @@ import {
 } from '@solana/spl-token';
 import { TOKEN_2022_PROGRAM_ID, TokenMetadata } from './types';
 import { BufferPolyfill, createBuffer } from '../buffer';
-import { calculateMetadataSize, METADATA_TYPE_SIZE, METADATA_LENGTH_SIZE } from './tokenMetadataUtils';
+import { calculateMetadataSize, serializeMetadata } from './tokenMetadataUtils';
 
 // Helper to create mint instructions
 export const createMintInstructions = async (
@@ -23,15 +23,16 @@ export const createMintInstructions = async (
   metadata: TokenMetadata
 ): Promise<TransactionInstruction[]> => {
   // Calculate required space and rent for the mint account
-  // Include both required extensions for Token-2022 compatibility
-  const extensions = [ExtensionType.MetadataPointer, ExtensionType.TokenMetadata];
+  // Only use MetadataPointer extension to avoid "Cannot get type length for variable extension type: 19" error
+  const extensions = [ExtensionType.MetadataPointer];
   const mintLen = getMintLen(extensions);
   
-  // Calculate the metadata size
-  const metadataSize = calculateMetadataSize(metadata);
+  // Calculate the metadata size using our serialization helper
+  const serializedMetadata = serializeMetadata(metadata);
+  const metadataSize = serializedMetadata.length;
   
   // Total space needed for the mint account with extra padding for safety
-  const totalMintLen = mintLen + metadataSize + 200;
+  const totalMintLen = mintLen + metadataSize + 500;
   
   // Create instructions array
   const instructions: TransactionInstruction[] = [];

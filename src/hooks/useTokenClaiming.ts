@@ -1,12 +1,14 @@
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { toast } from '@/components/ui/use-toast';
-import { claimEventToken } from '@/utils/eventServices';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { toast } from 'sonner';
+import { claimCompressedToken } from '@/utils/token/compression/claimOperations';
 import { verifyTokenClaim } from '@/utils/compressionApi';
 
 export const useTokenClaiming = (eventId: string | undefined) => {
-  const { connected, publicKey } = useWallet();
+  const { connection } = useConnection();
+  const { connected, publicKey, signTransaction } = useWallet();
   const [isClaiming, setIsClaiming] = useState(false);
   const [hasClaimed, setHasClaimed] = useState(false);
 
@@ -28,19 +30,15 @@ export const useTokenClaiming = (eventId: string | undefined) => {
 
   const handleClaimToken = async () => {
     if (!connected || !publicKey || !eventId) {
-      toast({
-        title: "Unable to Claim",
-        description: "Please connect your wallet first.",
-        variant: "destructive",
+      toast.error("Unable to Claim", {
+        description: "Please connect your wallet first."
       });
       return;
     }
 
     if (hasClaimed) {
-      toast({
-        title: "Already Claimed",
-        description: "You have already claimed a token for this event.",
-        variant: "destructive",
+      toast.error("Already Claimed", {
+        description: "You have already claimed a token for this event."
       });
       return;
     }
@@ -48,27 +46,29 @@ export const useTokenClaiming = (eventId: string | undefined) => {
     setIsClaiming(true);
     try {
       console.log('Claiming token for event:', eventId, 'to wallet:', publicKey.toString());
-      const success = await claimEventToken(eventId, publicKey.toString());
+      
+      // Use our enhanced claim function with connected wallet
+      const success = await claimCompressedToken(
+        eventId, 
+        publicKey.toString(),
+        connection,
+        signTransaction
+      );
       
       if (success) {
         setHasClaimed(true);
-        toast({
-          title: "Success!",
-          description: "You've successfully claimed a token for this event.",
+        toast.success("Success!", {
+          description: "You've successfully claimed a token for this event."
         });
       } else {
-        toast({
-          title: "Claim Failed",
-          description: "Failed to claim token. Please try again later.",
-          variant: "destructive",
+        toast.error("Claim Failed", {
+          description: "Failed to claim token. Please try again later."
         });
       }
     } catch (error) {
       console.error('Error claiming token:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "An unknown error occurred while claiming your token.",
-        variant: "destructive",
+      toast.error("Error", {
+        description: error instanceof Error ? error.message : "An unknown error occurred while claiming your token."
       });
     } finally {
       setIsClaiming(false);

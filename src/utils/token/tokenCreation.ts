@@ -16,7 +16,7 @@ import {
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import { calculateMetadataSize, METADATA_TYPE_SIZE, METADATA_LENGTH_SIZE } from './tokenMetadataUtils';
+import { calculateMetadataSize, serializeMetadata } from './tokenMetadataUtils';
 
 /**
  * Creates a token with metadata
@@ -56,20 +56,22 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate space needed for mint with both required extensions
-    // Based on Light Protocol documentation, we need BOTH extensions
-    const extensions = [ExtensionType.MetadataPointer, ExtensionType.TokenMetadata];
+    // Calculate space needed for mint - IMPORTANT: Only use supported extensions
+    // The error "Cannot get type length for variable extension type: 19" occurs because
+    // ExtensionType.TokenMetadata (value 19) is not properly supported in this version
+    // Using only MetadataPointer extension which is supported
+    const extensions = [ExtensionType.MetadataPointer];
     const mintLen = getMintLen(extensions);
     
-    console.log(`Base mint length with extensions: ${mintLen} bytes`);
+    console.log(`Base mint length with MetadataPointer extension: ${mintLen} bytes`);
     
-    // Calculate additional space needed for metadata
-    const metadataSize = calculateMetadataSize(metadata);
-    console.log(`Additional metadata size: ${metadataSize} bytes`);
+    // Serialize the metadata to calculate its size
+    const serializedMetadata = serializeMetadata(metadata);
+    const metadataSize = serializedMetadata.length;
+    console.log(`Serialized metadata size: ${metadataSize} bytes`);
     
-    // Total space needed for the mint account
-    // Adding extra padding to ensure sufficient space
-    const totalSize = mintLen + metadataSize + 200; 
+    // Total space needed for the mint account with generous padding
+    const totalSize = mintLen + metadataSize + 500; 
     console.log(`Total allocated size: ${totalSize} bytes`);
     
     // Calculate minimum required lamports for rent exemption based on total size
