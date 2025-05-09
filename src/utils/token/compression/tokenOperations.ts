@@ -3,7 +3,8 @@ import {
   Connection, 
   Keypair, 
   PublicKey, 
-  Transaction, 
+  Transaction,
+  TransactionInstruction,
   sendAndConfirmTransaction 
 } from '@solana/web3.js';
 import { TransactionSigner } from '../types';
@@ -32,9 +33,19 @@ export const compress = async (
       destinationOwner: recipient
     };
     
+    // Get the instruction data
+    const compressInstructionData = CompressedTokenProgram.compress(compressParams);
+    
+    // Create a proper TransactionInstruction object
+    const compressInstruction = new TransactionInstruction({
+      programId: compressInstructionData.programId,
+      keys: compressInstructionData.keys,
+      data: compressInstructionData.data
+    });
+    
     // Build transaction
     const tx = new Transaction();
-    tx.add(CompressedTokenProgram.compress(compressParams));
+    tx.add(compressInstruction);
     
     // Send and confirm transaction
     // In reality, signing would depend on whether owner is a Keypair or TransactionSigner

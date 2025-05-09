@@ -2,7 +2,8 @@
 import { 
   Connection, 
   PublicKey,
-  Transaction
+  Transaction,
+  TransactionInstruction
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';
@@ -22,10 +23,17 @@ export const createTokenPool = async (
     const walletPubkey = new PublicKey(walletAddress);
     
     // Create the token pool instruction
-    const poolInstruction = CompressedTokenProgram.createTokenPoolInstruction({ 
+    const poolInstructionData = CompressedTokenProgram.createTokenPoolInstruction({ 
       mint: mintPubkey,
       payer: walletPubkey,
       programId: TOKEN_2022_PROGRAM_ID
+    });
+    
+    // Create a proper TransactionInstruction object
+    const poolInstruction = new TransactionInstruction({
+      programId: poolInstructionData.programId,
+      keys: poolInstructionData.keys,
+      data: poolInstructionData.data
     });
     
     // Create and sign the transaction

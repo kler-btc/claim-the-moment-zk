@@ -12,7 +12,7 @@ import {
   createInitializeInstruction
 } from '@solana/spl-token';
 import { TOKEN_2022_PROGRAM_ID, TokenMetadata } from './types';
-import { createBuffer } from '../buffer';
+import { BufferPolyfill, createBuffer } from '../buffer';
 
 // Helper to create mint instructions
 export const createMintInstructions = async (
@@ -83,20 +83,20 @@ export const createMintToInstruction = (
   authority: PublicKey,
   amount: number
 ): TransactionInstruction => {
-  // Create a Uint8Array with the instruction code and amount data
-  const data = new Uint8Array(9); // 1 byte for instruction code + 8 bytes for amount
-  data[0] = 7; // Instruction code for 'MintTo'
+  // Create data with instruction code and amount
+  const buffer = BufferPolyfill.from([7]); // Instruction code for 'MintTo'
   
   // For now, leaving the amount as zeros for simplicity
   // In a real implementation, we would encode the amount properly
   
-  return {
+  // Create a proper TransactionInstruction object
+  return new TransactionInstruction({
     programId: TOKEN_2022_PROGRAM_ID,
     keys: [
       { pubkey: mint, isSigner: false, isWritable: true },
       { pubkey: destination, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: false },
     ],
-    data: data
-  };
+    data: buffer.bytes
+  });
 };
