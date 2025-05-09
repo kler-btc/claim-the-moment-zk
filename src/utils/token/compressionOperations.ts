@@ -7,6 +7,7 @@ import {
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult, TransactionSigner } from './types';
+import { createBuffer } from '../buffer';
 
 // Simulated Light Protocol compressed token program
 // In a real implementation, this would be imported from Light Protocol's SDK
@@ -18,13 +19,15 @@ const CompressedTokenProgram = {
   }) => {
     // This is a placeholder for the actual instruction creation
     // In a real implementation, this would create a proper instruction
+    const data = new Uint8Array([0x01, 0x02, 0x03]); // Placeholder data using Uint8Array
+    
     return {
       programId,
       keys: [
         { pubkey: mint, isSigner: false, isWritable: true },
         { pubkey: payer, isSigner: true, isWritable: true }
       ],
-      data: Buffer.from([0x01, 0x02, 0x03]) // Placeholder data
+      data: data
     };
   },
   compress: (params: {
@@ -36,6 +39,8 @@ const CompressedTokenProgram = {
   }) => {
     // This is a placeholder for the actual instruction creation
     // In a real implementation, this would create a proper instruction
+    const data = new Uint8Array([0x04, 0x05, 0x06]); // Placeholder data using Uint8Array
+    
     return {
       programId: TOKEN_2022_PROGRAM_ID,
       keys: [
@@ -44,7 +49,7 @@ const CompressedTokenProgram = {
         { pubkey: params.source, isSigner: false, isWritable: true },
         { pubkey: params.destinationOwner, isSigner: false, isWritable: false }
       ],
-      data: Buffer.from([0x04, 0x05, 0x06]) // Placeholder data
+      data: data
     };
   }
 };
