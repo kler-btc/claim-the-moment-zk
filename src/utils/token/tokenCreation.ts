@@ -10,8 +10,7 @@ import {
   createInitializeMintInstruction,
   ExtensionType,
   getMintLen,
-  createInitializeMetadataPointerInstruction,
-  TOKEN_METADATA_PROGRAM_ID
+  createInitializeMetadataPointerInstruction
 } from '@solana/spl-token';
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails } from './types';
@@ -57,7 +56,6 @@ export const createToken = async (
     const walletPubkey = new PublicKey(walletAddress);
     
     // Calculate space needed for mint with correct extensions
-    // IMPORTANT: Space calculation was incorrect - need to calculate space for BOTH extensions
     const extensions = [ExtensionType.MetadataPointer];
     const mintLen = getMintLen(extensions);
     
