@@ -26,11 +26,8 @@ export const createMintInstructions = async (
   const extensions = [ExtensionType.MetadataPointer];
   const baseMintLen = getMintLen(extensions);
   
-  // Calculate the additional space needed for metadata
-  const metadataSize = calculateMetadataSize(metadata);
-  
-  // Total space needed for the mint account
-  const totalMintLen = baseMintLen + metadataSize;
+  // Calculate the total size needed using our improved function
+  const totalMintLen = calculateMetadataSize(metadata);
   
   // Create instructions array
   const instructions: TransactionInstruction[] = [];

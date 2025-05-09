@@ -4,7 +4,8 @@ import {
   PublicKey,
   Transaction,
   TransactionInstruction,
-  SystemProgram
+  SystemProgram,
+  LAMPORTS_PER_SOL
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';
@@ -33,27 +34,29 @@ export const createTokenPool = async (
     
     console.log('Token pool address:', poolAddress.toBase58());
     
-    // Calculate space needed for the token pool (simplified for demo)
-    // In a real implementation, this would need to be calculated based on Light Protocol specs
+    // Calculate space needed for the token pool
+    // In a real implementation with Light Protocol, this would be based on their specifications
     const poolSize = 1000; 
     const poolLamports = await connection.getMinimumBalanceForRentExemption(poolSize);
+    
+    // Add extra SOL to ensure the account is properly funded
+    const totalLamports = poolLamports + LAMPORTS_PER_SOL * 0.01;
     
     // Create the token pool transaction
     const transaction = new Transaction();
     
     // Add instruction to create the pool account
-    // Note: In a real implementation with Light Protocol, this would use their SDK methods
     transaction.add(
       SystemProgram.createAccount({
         fromPubkey: walletPubkey,
         newAccountPubkey: poolAddress,
         space: poolSize,
-        lamports: poolLamports,
+        lamports: totalLamports,
         programId: TOKEN_2022_PROGRAM_ID
       })
     );
     
-    // Initialize the pool (simplified for demo)
+    // Initialize the pool
     // This simulates a Light Protocol pool initialization
     transaction.add(
       new TransactionInstruction({
@@ -69,7 +72,7 @@ export const createTokenPool = async (
     
     // Set transaction parameters
     transaction.feePayer = walletPubkey;
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
     
     // Have the wallet sign the transaction
@@ -77,14 +80,18 @@ export const createTokenPool = async (
     const signedTx = await signTransaction(transaction);
     
     console.log("Transaction signed, sending to network...");
-    const txId = await connection.sendRawTransaction(signedTx.serialize());
+    const txId = await connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+      maxRetries: 3
+    });
     
     // Wait for confirmation
     console.log("Waiting for transaction confirmation...");
     await connection.confirmTransaction({
       signature: txId,
       blockhash: blockhash,
-      lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+      lastValidBlockHeight: lastValidBlockHeight
     }, 'confirmed');
     
     console.log('Token pool created with tx:', txId);
@@ -101,12 +108,26 @@ export const createTokenPool = async (
     // Return the transaction ID and merkle root
     return {
       transactionId: txId,
-      merkleRoot: poolAddress.toBase58() // Using pool address as the merkle root for simplicity
+      merkleRoot: poolAddress.toBase58() // Using pool address as the merkle root for this demo
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating token pool:', error);
+    
+    // Improved error messaging
+    let errorMessage = "Make sure you have enough SOL in your wallet and try again";
+    
+    if (error instanceof Error) {
+      if (error.message.includes('insufficient funds')) {
+        errorMessage = "Insufficient SOL in your wallet. Please add more SOL and try again.";
+      } else if (error.message.includes('Transaction simulation failed')) {
+        errorMessage = "Transaction simulation failed. Please try again or check Solana network status.";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     toast.error("Failed to create token pool", {
-      description: "Make sure you have enough SOL in your wallet and try again"
+      description: errorMessage
     });
     throw new Error(`Failed to create token pool: ${error instanceof Error ? error.message : String(error)}`);
   }

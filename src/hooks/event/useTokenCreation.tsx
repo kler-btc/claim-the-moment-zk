@@ -52,7 +52,7 @@ export const useTokenCreation = (
 
     try {
       // Create the token with metadata using Token-2022
-      console.log("Sending token creation request...");
+      console.log("Sending token creation request with wallet:", walletPublicKey);
       
       const tokenResult = await createEvent(
         eventDetails, 
@@ -75,11 +75,28 @@ export const useTokenCreation = (
         description: "Your event token has been created with Token-2022 metadata."
       });
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating token:", error);
+      
+      // Improved error messaging
+      let errorMessage = "Failed to mint token. Please try again.";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Check for specific error patterns
+        if (error.message.includes('invalid account data')) {
+          errorMessage = "Token creation failed due to invalid account data. This might be due to incorrect account sizing or initialization order.";
+        } else if (error.message.includes('insufficient funds')) {
+          errorMessage = "Insufficient SOL in your wallet to create the token. Please add more SOL and try again.";
+        } else if (error.message.includes('Transaction simulation failed')) {
+          errorMessage = "Transaction simulation failed. This might be due to an issue with the Solana network or account setup.";
+        }
+      }
+      
       setStep(CreationStep.INITIAL);
       toast.error("Error creating token", {
-        description: error instanceof Error ? error.message : "Failed to mint token. Please try again."
+        description: errorMessage
       });
       return false;
     } finally {
