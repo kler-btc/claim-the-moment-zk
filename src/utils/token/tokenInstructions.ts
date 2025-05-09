@@ -89,7 +89,7 @@ export const createMintToInstruction = (
   // For now, leaving the amount as zeros for simplicity
   // In a real implementation, we would encode the amount properly
   
-  // Create a proper TransactionInstruction object with Buffer-compatible data
+  // Create a proper TransactionInstruction object
   return new TransactionInstruction({
     programId: TOKEN_2022_PROGRAM_ID,
     keys: [
@@ -97,6 +97,6 @@ export const createMintToInstruction = (
       { pubkey: destination, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: false },
     ],
-    data: createBuffer(buffer.bytes) // Convert to Buffer-compatible Uint8Array
+    data: createBuffer(buffer) as Buffer
   });
 };

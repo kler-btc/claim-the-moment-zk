@@ -37,11 +37,11 @@ export const compress = async (
     // Get the instruction data
     const compressInstructionData = CompressedTokenProgram.compress(compressParams);
     
-    // Create a proper TransactionInstruction object with Buffer data
+    // Create a proper TransactionInstruction object
     const compressInstruction = new TransactionInstruction({
       programId: compressInstructionData.programId,
       keys: compressInstructionData.keys,
-      data: compressInstructionData.data // This is now a Buffer-compatible Uint8Array
+      data: compressInstructionData.data as Buffer
     });
     
     // Build transaction

@@ -30,11 +30,11 @@ export const createTokenPool = async (
       programId: TOKEN_2022_PROGRAM_ID
     });
     
-    // Create a proper TransactionInstruction object with Buffer data
+    // Create a proper TransactionInstruction object
     const poolInstruction = new TransactionInstruction({
       programId: poolInstructionData.programId,
       keys: poolInstructionData.keys,
-      data: poolInstructionData.data // This is now a Buffer-compatible Uint8Array
+      data: poolInstructionData.data as Buffer
     });
     
     // Create and sign the transaction
