@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import * as bs58 from 'bs58';
 import { createTokenPool as lightCreateTokenPool } from '@lightprotocol/compressed-token';
 import { poolService } from '@/lib/db';
+import { getLightRpc } from '@/utils/compressionApi';
 
 // Constants for Light Protocol's programs
 const LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
@@ -34,9 +35,12 @@ export const createTokenPool = async (
     
     console.log("Using Light Protocol's createTokenPool with mint:", mintAddress);
     
+    // Get Light Protocol RPC instance
+    const lightRpc = getLightRpc();
+    
     // Use the actual Light Protocol createTokenPool function
     const txId = await lightCreateTokenPool(
-      connection,
+      lightRpc, // Use Light Protocol Rpc instead of Connection
       {
         publicKey: walletPubkey,
         signTransaction
@@ -48,7 +52,7 @@ export const createTokenPool = async (
     
     console.log('Token pool created with tx:', txId);
     
-    // Wait for transaction confirmation
+    // Wait for transaction confirmation (use the original connection for this)
     const latestBlockhash = await connection.getLatestBlockhash();
     await connection.confirmTransaction({
       signature: txId,

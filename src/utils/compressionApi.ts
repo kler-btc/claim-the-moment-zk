@@ -16,18 +16,15 @@ export const getSolanaConnection = (): Connection => {
   return new Connection(HELIUS_RPC_URL, 'confirmed');
 };
 
-// Create a Light Protocol RPC client
+// Create a Light Protocol RPC client (updated to correctly instantiate Rpc)
 export const getLightRpc = (): Rpc => {
   console.log("Creating Light Protocol RPC client with endpoint:", HELIUS_RPC_URL);
   
-  // Create Rpc instance with required parameters
+  // Create Rpc instance with required parameters for Light Protocol
   return new Rpc(
-    HELIUS_RPC_URL,   // endpoint
-    'confirmed',      // commitment
-    '1.0.0',          // apiVersion
-    {                 // additional config
-      wsEndpoint: `wss://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
-    }
+    HELIUS_RPC_URL,   // standard RPC endpoint
+    HELIUS_RPC_URL,   // compression API endpoint (same as RPC for Helius)
+    HELIUS_RPC_URL    // prover endpoint (same as RPC for Helius)
   );
 };
 
