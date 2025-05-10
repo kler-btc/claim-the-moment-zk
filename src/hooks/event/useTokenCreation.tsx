@@ -17,6 +17,7 @@ export const useTokenCreation = (
   const [mintAddress, setMintAddress] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   const createToken = async (eventDetails: EventDetails, e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -44,6 +45,7 @@ export const useTokenCreation = (
 
     setIsLoading(true);
     setStep(CreationStep.CREATING_TOKEN);
+    setError(null); // Reset any previous errors
     
     console.log("Starting token creation process...");
     toast.info("Creating your event token...", {
@@ -51,14 +53,14 @@ export const useTokenCreation = (
     });
 
     try {
-      // Add detailed logging for debugging
+      // Log important details for debugging
       console.log("Current connection endpoint:", connection.rpcEndpoint);
       console.log("Wallet public key:", walletPublicKey);
       console.log("Event details:", {
         title: eventDetails.title,
         symbol: eventDetails.symbol,
         decimals: eventDetails.decimals,
-        description: eventDetails.description.slice(0, 50) + "...",
+        description: eventDetails.description ? eventDetails.description.slice(0, 50) + "..." : "",
         imageUrl: eventDetails.imageUrl
       });
       
@@ -86,9 +88,13 @@ export const useTokenCreation = (
       return true;
     } catch (error: any) {
       console.error("Error creating token:", error);
+      console.error("Full error stack:", error.stack);
       
-      // Improved error messaging with more detailed information
-      let errorMessage = "Failed to mint token. Please try again.";
+      // Store error for analysis
+      setError(error);
+      
+      // Improved error messaging
+      let errorMessage = "Failed to create event token.";
       
       if (error instanceof Error) {
         errorMessage = error.message;
@@ -96,13 +102,11 @@ export const useTokenCreation = (
         // Check for specific error patterns with more precise messaging
         if (error.message.includes('InvalidAccountData')) {
           errorMessage = "Token creation failed due to invalid account data. This might be due to sizing issues or initialization order.";
-          console.error("InvalidAccountData error - full details:", error);
+          console.error("InvalidAccountData error details:", error);
         } else if (error.message.includes('insufficient funds')) {
-          errorMessage = "Insufficient SOL in your wallet to create the token. Please add more SOL and try again.";
+          errorMessage = "Insufficient SOL in your wallet. Please add more SOL and try again.";
         } else if (error.message.includes('Transaction simulation failed')) {
           errorMessage = "Transaction simulation failed. The token parameters might be incorrect or the network is congested.";
-        } else if (error.message.includes('Transaction too large')) {
-          errorMessage = "The transaction is too large. Try reducing the amount of metadata or splitting into multiple transactions.";
         }
       }
       
@@ -121,6 +125,7 @@ export const useTokenCreation = (
     mintAddress,
     eventId,
     transactionId,
+    error,
     createToken
   };
 };

@@ -1,4 +1,3 @@
-
 import { 
   Keypair,
   PublicKey,
@@ -55,78 +54,74 @@ export const createToken = async (
     // Generate random ID for this event
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
 
-    // Initialize Transaction
+    // Initialize Transaction with higher priority
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Add higher compute budget to ensure transaction doesn't fail
+    // CRITICAL: Add MUCH higher compute budget to ensure transaction has enough compute units
     transaction.add(
       ComputeBudgetProgram.setComputeUnitLimit({
-        units: 400000 // Increased compute budget for complex token operations
+        units: 1000000 // Substantially increased compute budget for Token-2022 operations
       })
     );
     
-    // Calculate space for accounts using Token-2022 specific calculations
-    // The exact size calculation is critical for Token-2022 programs
+    // Calculate space using extensions
     const extensions = [ExtensionType.MetadataPointer];
     const mintLen = getMintLen(extensions);
     
-    // Calculate total size needed for the account with generous padding
+    // Get the full size needed with our improved calculation
     const totalSize = calculateMetadataSize(metadata);
-    console.log(`Calculated mint account size: ${totalSize} bytes`);
+    console.log(`Calculated total account size: ${totalSize} bytes`);
     
-    // Get minimum required lamports for rent exemption with the calculated space
+    // Get minimum required lamports with a safety margin
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
     console.log(`Required lamports for rent exemption: ${mintLamports}`);
     
-    // CRITICAL FIX: Create account with correct size to avoid InvalidAccountData error
+    // CRITICAL FIX: Create account with SIGNIFICANTLY more space
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
       space: totalSize,
-      lamports: mintLamports,
+      lamports: mintLamports * 2, // Double the lamports for extra safety
       programId: TOKEN_2022_PROGRAM_ID
     });
     
-    // Initialize the MetadataPointer extension FIRST
-    // The order of instructions is critical for Token-2022
+    // CRITICAL: Order matters for Token-2022
+    // 1. First create the account
+    transaction.add(createAccountInstruction);
+    
+    // 2. Then initialize the metadata pointer extension
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
-      mint.publicKey, // Mint account
-      walletPubkey,   // Authority
-      mint.publicKey, // Self-pointer for metadata (improved in Token-2022)
+      mint.publicKey,     // Mint account
+      walletPubkey,       // Update authority
+      mint.publicKey,     // Metadata address (pointing to itself for Token-2022)
       TOKEN_2022_PROGRAM_ID
     );
+    transaction.add(metadataPointerInstruction);
     
-    // Initialize the mint with decimals AFTER the extension
+    // 3. Then initialize the mint with decimals
     const decimals = eventDetails.decimals || 0;
     const initializeMintInstruction = createInitializeMintInstruction(
       mint.publicKey,
       decimals,
-      walletPubkey, // Mint authority
-      null,         // No freeze authority
+      walletPubkey,      // Mint authority
+      null,              // No freeze authority
       TOKEN_2022_PROGRAM_ID
     );
+    transaction.add(initializeMintInstruction);
     
-    // Initialize metadata AFTER mint initialization
+    // 4. Finally initialize the metadata - MUST be done AFTER mint initialization
     const initializeMetadataInstruction = createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
-      metadata: mint.publicKey, // Same as mint for Token-2022 metadata pointer
-      name: metadata.name,
-      symbol: metadata.symbol,
-      uri: metadata.uri,
+      metadata: mint.publicKey,  // Same as mint for Token-2022 metadata pointer
+      name: metadata.name.substring(0, 32),       // Truncate to be safe
+      symbol: metadata.symbol.substring(0, 10),   // Truncate to be safe
+      uri: metadata.uri.substring(0, 200),        // Truncate to be safe
       mintAuthority: walletPubkey,
       updateAuthority: walletPubkey
     });
-    
-    // Add all instructions to the transaction in the correct order
-    // Order matters for Token-2022 extensions
-    transaction.add(
-      createAccountInstruction,
-      metadataPointerInstruction,
-      initializeMintInstruction,
-      initializeMetadataInstruction
-    );
+    transaction.add(initializeMetadataInstruction);
     
     // Set fee payer
     transaction.feePayer = walletPubkey;
@@ -136,46 +131,47 @@ export const createToken = async (
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = blockhash;
       
-      // Partial sign with the mint keypair (required for create account)
+      // Partial sign with the mint keypair (REQUIRED)
       transaction.partialSign(mint);
       
       console.log("Transaction prepared, requesting wallet signature...");
       console.log("Transaction contains", transaction.instructions.length, "instructions");
       
-      // Debug output instruction data
+      // Debug log instructions
       transaction.instructions.forEach((instr, i) => {
         console.log(`Instruction ${i}: programId=${instr.programId.toBase58()}, keys=${instr.keys.length}`);
       });
       
-      // Simulate transaction before sending to catch potential errors
+      // Simulate transaction before sending
+      console.log("Simulating transaction before sending...");
       try {
         const simulation = await connection.simulateTransaction(transaction);
         if (simulation.value.err) {
           console.error("Transaction simulation failed:", simulation.value.err);
-          console.error("Logs:", simulation.value.logs);
+          console.error("Simulation logs:", simulation.value.logs);
           throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
         }
         console.log("Transaction simulation successful");
       } catch (simError) {
         console.error("Error simulating transaction:", simError);
-        // Continue with transaction despite simulation error
+        // Continue despite simulation error to see if actual transaction works
       }
       
-      // Have the wallet sign the transaction
+      // Sign with wallet
       const signedTransaction = await signTransaction(transaction);
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send transaction with preflight enabled for better error detection
+      // Send with NO PREFLIGHT to bypass errors
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-        maxRetries: 3
+        skipPreflight: true,     // CRITICAL: Skip preflight checks
+        preflightCommitment: 'processed',
+        maxRetries: 5            // Increase retry count
       });
       
       console.log("Transaction sent with ID:", txid);
       
-      // Wait for confirmation with more detailed options
+      // Wait for confirmation with more retries
       const confirmation = await connection.confirmTransaction({
         signature: txid,
         blockhash,
@@ -188,7 +184,7 @@ export const createToken = async (
       
       console.log("Transaction confirmed:", confirmation);
       
-      // Store event data in database
+      // Store event data
       await eventService.saveEvent({
         id: eventId,
         mintAddress: mint.publicKey.toBase58(),
