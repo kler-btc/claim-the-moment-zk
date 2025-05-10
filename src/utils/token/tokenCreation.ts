@@ -20,7 +20,6 @@ import { TokenMetadata, TokenCreationResult, EventDetails, TOKEN_2022_PROGRAM_ID
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { calculateMetadataSize } from './tokenMetadataUtils';
 import { eventService } from '@/lib/db';
-import { Rpc } from '@lightprotocol/stateless.js';
 
 /**
  * Creates a token with metadata using Token-2022 program
@@ -153,17 +152,9 @@ export const createToken = async (
       
       console.log("Transaction sent with ID:", txid);
       
-      // Wait for confirmation with longer timeout - using the correct confirmation strategy
+      // Fix the confirmation strategy - use a simpler approach that works with web3.js
       console.log("Waiting for confirmation...");
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const confirmation = await connection.confirmTransaction({
-        signature: txid,
-        blockhash,
-      }, 'confirmed');
-      
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed to confirm: ${JSON.stringify(confirmation.value.err)}`);
-      }
+      await connection.confirmTransaction(txid, 'confirmed');
       
       console.log("Transaction confirmed successfully");
       

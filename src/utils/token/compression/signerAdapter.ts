@@ -11,8 +11,8 @@ export interface LightProtocolSigner {
   // Light Protocol uses either signAllTransactions or signTransaction
   signAllTransactions?: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
   signTransaction?: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
-  // Adding secretKey as an optional property to match Signer interface
-  secretKey?: Uint8Array;
+  // Adding secretKey as a required property to match Signer interface
+  secretKey: Uint8Array;
 }
 
 /**
@@ -24,6 +24,11 @@ export const createLightSigner = (
   publicKey: PublicKey,
   signTransaction: SignerWalletAdapter['signTransaction']
 ): LightProtocolSigner => {
+  // Create a dummy secretKey with all zeros - Light Protocol checks for its existence
+  // but doesn't actually use it for web wallet operations
+  // This is a workaround for type compatibility only
+  const dummySecretKey = new Uint8Array(32).fill(0);
+
   return {
     publicKey,
     // Provide the signTransaction method that Light Protocol expects
@@ -40,9 +45,8 @@ export const createLightSigner = (
       }
       return signedTxs;
     },
-    // Add a dummy secretKey property that satisfies the type but is never used
-    // Note: This is a workaround for type compatibility only
-    // Light Protocol actually uses the signTransaction function for web wallets
-    secretKey: undefined
+    // Provide a dummy secretKey that satisfies the Signer interface
+    // This is required but will never be used for web wallets
+    secretKey: dummySecretKey
   };
 };

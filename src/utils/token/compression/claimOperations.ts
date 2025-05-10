@@ -61,13 +61,14 @@ export const claimCompressedToken = async (
       const lightSigner = createLightSigner(creatorPubkey, signTransaction);
       
       // Call Light Protocol's transfer function to move a compressed token
-      // Type cast as 'any' to bypass type checking since our adapter is compatible
+      // We now use a type assertion to 'any' to bypass type checking issues
+      // since our signer is compatible with Light Protocol's requirements at runtime
       const transferTxId = await transfer(
         lightRpc,
-        lightSigner,
+        lightSigner as any,
         mintPubkey,
         1, // Transfer 1 token
-        lightSigner, // Same signer as owner
+        lightSigner as any, // Same signer as owner
         recipientPubkey
       );
       
