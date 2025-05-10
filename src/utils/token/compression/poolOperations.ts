@@ -3,14 +3,9 @@ import {
   Connection, 
   PublicKey,
   Transaction,
-  TransactionInstruction,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
-  Keypair
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';
-import { createBuffer } from '../../buffer';
 import { toast } from 'sonner';
 import * as bs58 from 'bs58';
 import { createTokenPool as lightCreateTokenPool } from '@lightprotocol/compressed-token';
@@ -19,9 +14,16 @@ import { getLightRpc } from '@/utils/compressionApi';
 import { createLightSigner } from './signerAdapter';
 
 // Constants for Light Protocol's programs
-const LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
+const COMPRESSED_TOKEN_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
 
-// Create a token pool for Light Protocol compression
+/**
+ * Create a token pool for Light Protocol compression.
+ * 
+ * This function follows the Light Protocol browser pattern where:
+ * 1. We create a Light Protocol compatible signer adapter
+ * 2. We pass this to the Light Protocol functions with appropriate type assertions
+ * 3. The wallet signs the transaction when prompted
+ */
 export const createTokenPool = async (
   mintAddress: string,
   walletAddress: string,
@@ -42,9 +44,9 @@ export const createTokenPool = async (
     // Create a Light Protocol compatible signer
     const lightSigner = createLightSigner(walletPubkey, signTransaction);
     
-    // Use Light Protocol's createTokenPool function with explicit type assertion
-    // We know our adapter works with Light Protocol at runtime, but TypeScript doesn't know
-    // about the expected shape, so we use an assertion
+    // Use Light Protocol's createTokenPool function
+    // NOTE: We use type assertion here because our adapter doesn't have a secretKey,
+    // but Light Protocol functions don't actually use the secretKey for browser wallets
     const txId = await lightCreateTokenPool(
       lightRpc,
       lightSigner as any, // Type assertion for Light Protocol compatibility
@@ -55,19 +57,25 @@ export const createTokenPool = async (
     
     console.log('Token pool created with tx:', txId);
     
-    // Wait for transaction confirmation using a simple approach
-    await connection.confirmTransaction(txId, 'confirmed');
+    // Wait for transaction confirmation
+    const status = await connection.confirmTransaction(txId, 'confirmed');
+    
+    if (status.value.err) {
+      throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+    }
+    
+    console.log('Transaction confirmed successfully');
     
     // Calculate the pool address (PDA) to derive the same value Light Protocol uses
-    const [poolAddress] = await PublicKey.findProgramAddressSync(
+    const [poolAddress] = PublicKey.findProgramAddressSync(
       [Buffer.from("compressed-token-pool"), mintPubkey.toBuffer()],
-      LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID
+      COMPRESSED_TOKEN_PROGRAM_ID
     );
     
     // Get the state tree address (will be used for Merkle tree operations)
-    const [stateTreeAddress] = await PublicKey.findProgramAddressSync(
+    const [stateTreeAddress] = PublicKey.findProgramAddressSync(
       [Buffer.from("compressed-token-tree"), mintPubkey.toBuffer()],
-      LIGHT_PROTOCOL_COMPRESSION_PROGRAM_ID
+      COMPRESSED_TOKEN_PROGRAM_ID
     );
     
     console.log('Pool address:', poolAddress.toBase58());
@@ -101,8 +109,13 @@ export const createTokenPool = async (
   } catch (error: any) {
     console.error('Error creating token pool:', error);
     
+    // Detailed error logging
+    if (error.logs) {
+      console.error('Transaction logs:', error.logs);
+    }
+    
     // Improved error messaging
-    let errorMessage = "Make sure you have enough SOL in your wallet and try again";
+    let errorMessage = "Failed to create token pool";
     
     if (error.logs) {
       // Extract error from transaction logs

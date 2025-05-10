@@ -1,4 +1,3 @@
-
 import { 
   Keypair,
   PublicKey,
@@ -152,9 +151,14 @@ export const createToken = async (
       
       console.log("Transaction sent with ID:", txid);
       
-      // Fix the confirmation strategy - use a simpler approach that works with web3.js
+      // Use a proper confirmation approach
       console.log("Waiting for confirmation...");
-      await connection.confirmTransaction(txid, 'confirmed');
+      const status = await connection.confirmTransaction(txid, 'confirmed');
+      
+      // Check for transaction errors
+      if (status.value.err) {
+        throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+      }
       
       console.log("Transaction confirmed successfully");
       

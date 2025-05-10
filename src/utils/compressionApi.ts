@@ -1,9 +1,6 @@
 
-import { 
-  Connection, 
-  PublicKey
-} from '@solana/web3.js';
-import { Rpc } from '@lightprotocol/stateless.js';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { createRpc as createLightRpc } from '@lightprotocol/stateless.js';
 import { toast } from 'sonner';
 import { claimService } from '@/lib/db';
 
@@ -11,17 +8,21 @@ import { claimService } from '@/lib/db';
 const HELIUS_API_KEY = '9aeaaaaa-ac88-42a4-8f49-7b0c23cee762';
 export const HELIUS_RPC_URL = `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-// Create an RPC connection to Solana devnet via Helius
+// Create a standard Solana connection
 export const getSolanaConnection = (): Connection => {
   return new Connection(HELIUS_RPC_URL, 'confirmed');
 };
 
-// Create a Light Protocol RPC client (updated to correctly instantiate Rpc)
-export const getLightRpc = (): Rpc => {
+/**
+ * Create a Light Protocol RPC client
+ * 
+ * This uses the createRpc function from @lightprotocol/stateless.js which
+ * is the correct way to initialize the RPC for browser environments.
+ */
+export const getLightRpc = () => {
   console.log("Creating Light Protocol RPC client with endpoint:", HELIUS_RPC_URL);
   
-  // Create Rpc instance with required parameters for Light Protocol
-  return new Rpc(
+  return createLightRpc(
     HELIUS_RPC_URL,   // standard RPC endpoint
     HELIUS_RPC_URL,   // compression API endpoint (same as RPC for Helius)
     HELIUS_RPC_URL    // prover endpoint (same as RPC for Helius)

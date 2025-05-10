@@ -1,5 +1,5 @@
 
-import { PublicKey, Transaction, TransactionInstruction, SendTransactionError } from '@solana/web3.js';
+import { PublicKey, Connection, SendTransactionError } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'sonner';
 import { transfer } from '@lightprotocol/compressed-token';
@@ -7,11 +7,19 @@ import { eventService, poolService, claimService } from '@/lib/db';
 import { getLightRpc } from '@/utils/compressionApi';
 import { createLightSigner } from './signerAdapter';
 
-// On-demand claim a compressed token
+/**
+ * Claims a compressed token for an event.
+ * 
+ * Following the Light Protocol browser pattern:
+ * 1. We check if the claim is valid and hasn't been processed already
+ * 2. We create a Light Protocol compatible signer adapter
+ * 3. We build and send the transaction using Light Protocol's libraries
+ * 4. We update the database with the transaction result
+ */
 export const claimCompressedToken = async (
   eventId: string,
   recipientWallet: string,
-  connection: any, // Accept any to handle both Connection and Rpc
+  connection: Connection,
   signTransaction: SignerWalletAdapter['signTransaction']
 ): Promise<boolean> => {
   try {
@@ -60,12 +68,12 @@ export const claimCompressedToken = async (
       // Create Light Protocol compatible signer
       const lightSigner = createLightSigner(creatorPubkey, signTransaction);
       
-      // Call Light Protocol's transfer function to move a compressed token
-      // Using explicit type assertion here as we know our adapter works with Light Protocol
-      // at runtime, but TypeScript doesn't know about the expected shape
+      // Call Light Protocol's transfer function
+      // NOTE: We use type assertion here because our adapter doesn't have a secretKey,
+      // but Light Protocol functions don't actually use the secretKey for browser wallets
       const transferTxId = await transfer(
         lightRpc,
-        lightSigner as any, // Type assertion to satisfy Light Protocol's Signer requirements
+        lightSigner as any, // Type assertion for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
         lightSigner as any, // Same signer as owner
@@ -74,8 +82,12 @@ export const claimCompressedToken = async (
       
       console.log('Transfer transaction sent with ID:', transferTxId);
       
-      // Wait for confirmation (use the original connection for this)
-      await connection.confirmTransaction(transferTxId, 'confirmed');
+      // Wait for confirmation with proper error handling
+      const status = await connection.confirmTransaction(transferTxId, 'confirmed');
+      
+      if (status.value.err) {
+        throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+      }
       
       console.log(`Token transfer confirmed with txId: ${transferTxId}`);
       
@@ -109,12 +121,11 @@ export const claimCompressedToken = async (
       
       throw new Error(`Failed to claim token: ${errorMessage}`);
     }
-    
   } catch (error) {
     console.error('Error claiming compressed token:', error);
     toast.error("Error Claiming Token", {
       description: error instanceof Error ? error.message : "Failed to claim token"
     });
-    throw new Error(`Failed to claim token: ${error instanceof Error ? error.message : String(error)}`);
+    throw error; // Let the caller handle this error
   }
 };
