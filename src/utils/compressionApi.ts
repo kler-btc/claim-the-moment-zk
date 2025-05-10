@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createRpc } from '@lightprotocol/stateless.js';
 import { toast } from 'sonner';
@@ -22,15 +21,22 @@ export const getSolanaConnection = (): Connection => {
 export const getLightRpc = () => {
   console.log("Creating Light Protocol RPC client with endpoint:", HELIUS_RPC_URL);
   
-  // Create the Light Protocol RPC client with proper configuration
-  // Note: All three parameters must be the same for browser environments
-  const lightRpc = createRpc(
-    HELIUS_RPC_URL,   // standard RPC endpoint
-    HELIUS_RPC_URL,   // compression API endpoint (same as RPC for Helius)
-    HELIUS_RPC_URL    // prover endpoint (same as RPC for Helius)
-  );
-  
-  return lightRpc;
+  try {
+    // FIXED: Create Light Protocol RPC client with proper configuration for browser
+    // When using in a browser, Light Protocol requires ALL THREE URLs to be the same
+    const lightRpc = createRpc(
+      HELIUS_RPC_URL,
+      HELIUS_RPC_URL,
+      HELIUS_RPC_URL
+    );
+    
+    console.log("Light Protocol RPC client created successfully");
+    return lightRpc;
+  } catch (error) {
+    console.error("Error creating Light Protocol RPC client:", error);
+    toast.error("Failed to initialize compression client");
+    throw error;
+  }
 };
 
 // Get validity proof for compressed accounts

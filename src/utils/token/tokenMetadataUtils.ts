@@ -9,19 +9,20 @@ import { ExtensionType, getMintLen } from '@solana/spl-token';
  * @returns The size in bytes required for the metadata
  */
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
-  // For SPL Token-2022 with metadata extension, we need very precise size allocation
+  // IMPROVED: More precise calculation for Token-2022 metadata size
   
   // Get the base mint size with the MetadataPointer extension
   const baseMintLen = getMintLen([ExtensionType.MetadataPointer]);
   
-  // Each string field requires its actual size plus length prefix (4 bytes)
-  const nameSize = 4 + Buffer.from(metadata.name || "").length;
+  // Calculate metadata string fields precisely
+  const nameSize = 4 + Buffer.from(metadata.name || "").length; // length prefix + bytes
   const symbolSize = 4 + Buffer.from(metadata.symbol || "").length;
   const uriSize = 4 + Buffer.from(metadata.uri || "").length;
   
-  // Additional metadata fields size calculation
-  let additionalMetadataSize = 8; // Size for number of additional fields (u64)
+  // Calculate additional metadata fields size
+  let additionalMetadataSize = 4; // Just the length prefix for empty array
   if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
+    // For each key-value pair
     for (const [key, value] of metadata.additionalMetadata) {
       additionalMetadataSize += 4 + Buffer.from(key).length; // Key with length prefix
       additionalMetadataSize += 4 + Buffer.from(value).length; // Value with length prefix
@@ -29,14 +30,14 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   }
   
   // Fixed header size for metadata structure
-  const METADATA_HEADER_SIZE = 32; // type + alignment
+  const METADATA_HEADER_SIZE = 32; // includes type, alignment, etc.
   
-  // Calculate total size with alignment requirements
-  const totalMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalMetadataSize;
+  // Calculate raw metadata size
+  const rawMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalMetadataSize;
   
-  // Apply generous padding for Token-2022 metadata (10KB)
-  // Token-2022 requires much more space than expected for proper initialization
-  const SIZE_WITH_PADDING = baseMintLen + totalMetadataSize + 10240; 
+  // CRITICAL: Token-2022 metadata needs much more space than calculated
+  // Apply very generous padding (25KB total) for reliable Token-2022 metadata initialization
+  const SIZE_WITH_PADDING = baseMintLen + rawMetadataSize + 25 * 1024;
   
   // Ensure alignment to 8 bytes (Solana requirement)
   return Math.ceil(SIZE_WITH_PADDING / 8) * 8;
