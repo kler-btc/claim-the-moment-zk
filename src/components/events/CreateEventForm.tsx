@@ -27,6 +27,9 @@ const CreateEventForm = ({
     setShowMetadataPreview(!showMetadataPreview);
   };
 
+  // Helper for validating field lengths
+  const isSymbolTooLong = eventDetails.symbol.length > 10;
+
   return (
     <Card>
       <CardHeader>
@@ -45,8 +48,14 @@ const CreateEventForm = ({
               placeholder="Solana Hackathon 2025"
               value={eventDetails.title}
               onChange={onChange}
+              maxLength={32} // Token-2022 name limit
               required
             />
+            {eventDetails.title.length > 25 && (
+              <p className="text-xs text-amber-500">
+                {32 - eventDetails.title.length} characters remaining
+              </p>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -100,10 +109,10 @@ const CreateEventForm = ({
             />
           </div>
 
-          {/* New Token Metadata Fields */}
+          {/* Token Metadata Fields with improved validation */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Token Symbol</Label>
+              <Label className={isSymbolTooLong ? "text-red-500" : ""}>Token Symbol</Label>
               <Input
                 id="symbol"
                 name="symbol"
@@ -111,10 +120,12 @@ const CreateEventForm = ({
                 maxLength={10}
                 value={eventDetails.symbol}
                 onChange={onChange}
+                className={isSymbolTooLong ? "border-red-500" : ""}
                 required
               />
-              <p className="text-xs text-muted-foreground">
+              <p className={`text-xs ${isSymbolTooLong ? "text-red-500" : "text-muted-foreground"}`}>
                 Short symbol for the token (max 10 characters)
+                {isSymbolTooLong && " - Symbol is too long"}
               </p>
             </div>
             <div className="space-y-2">
@@ -159,14 +170,14 @@ const CreateEventForm = ({
               name="attendeeCount"
               type="number"
               min="1"
-              max="1000"
+              max="1000" // Set lower max for testing
               placeholder="100"
               value={eventDetails.attendeeCount || ''}
               onChange={onChange}
               required
             />
             <p className="text-xs text-muted-foreground">
-              This determines how many compressed tokens will be minted
+              This determines how many compressed tokens will be minted (max 1000 for testing)
             </p>
           </div>
         
@@ -203,7 +214,7 @@ const CreateEventForm = ({
           <Button 
             type="submit" 
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || isSymbolTooLong}
           >
             {isLoading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Compressed Token...</>

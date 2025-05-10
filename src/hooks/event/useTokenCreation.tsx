@@ -43,13 +43,29 @@ export const useTokenCreation = (
       return false;
     }
 
+    // Validate token symbol length
+    if (eventDetails.symbol.length > 10) {
+      toast.error("Symbol too long", {
+        description: "Token symbol must be 10 characters or less."
+      });
+      return false;
+    }
+
+    // Ensure reasonable token supply
+    if (eventDetails.attendeeCount > 1000) {
+      toast.error("Attendee count too high", {
+        description: "For testing purposes, please limit attendees to 1000 or fewer."
+      });
+      return false;
+    }
+
     setIsLoading(true);
     setStep(CreationStep.CREATING_TOKEN);
     setError(null); // Reset any previous errors
     
     console.log("Starting token creation process...");
     toast.info("Creating your event token...", {
-      description: "Please approve the transaction in your wallet."
+      description: "Please approve the transaction in your wallet. This may take a moment."
     });
 
     try {
@@ -61,7 +77,8 @@ export const useTokenCreation = (
         symbol: eventDetails.symbol,
         decimals: eventDetails.decimals,
         description: eventDetails.description ? eventDetails.description.slice(0, 50) + "..." : "",
-        imageUrl: eventDetails.imageUrl
+        imageUrl: eventDetails.imageUrl,
+        attendeeCount: eventDetails.attendeeCount
       });
       
       // Create the token with metadata using Token-2022
@@ -107,6 +124,8 @@ export const useTokenCreation = (
           errorMessage = "Insufficient SOL in your wallet. Please add more SOL and try again.";
         } else if (error.message.includes('Transaction simulation failed')) {
           errorMessage = "Transaction simulation failed. The token parameters might be incorrect or the network is congested.";
+        } else if (error.message.includes('Transaction too large')) {
+          errorMessage = "Transaction exceeded size limits. Try reducing token metadata size.";
         }
       }
       

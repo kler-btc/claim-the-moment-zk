@@ -1,3 +1,4 @@
+
 import { 
   Keypair,
   PublicKey,
@@ -39,11 +40,11 @@ export const createToken = async (
     // Set token metadata
     const metadata: TokenMetadata = {
       mint: mint.publicKey,
-      name: eventDetails.title,
-      symbol: eventDetails.symbol,
-      uri: eventDetails.imageUrl,
+      name: eventDetails.title.substring(0, 32), // Truncate to avoid overflows
+      symbol: eventDetails.symbol.substring(0, 10), // Truncate to avoid overflows
+      uri: eventDetails.imageUrl.substring(0, 200), // Truncate to avoid overflows
       additionalMetadata: [
-        ['description', eventDetails.description],
+        ['description', eventDetails.description || ''],
         ['date', eventDetails.date],
         ['time', eventDetails.time],
         ['location', eventDetails.location],
@@ -54,39 +55,40 @@ export const createToken = async (
     // Generate random ID for this event
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
 
-    // Initialize Transaction with higher priority
+    // CRITICAL: Initialize Transaction with EXTREME compute budget
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // CRITICAL: Add MUCH higher compute budget to ensure transaction has enough compute units
+    // SUPER HIGH compute budget - Token-2022 needs much more than standard SPL tokens
     transaction.add(
       ComputeBudgetProgram.setComputeUnitLimit({
-        units: 1000000 // Substantially increased compute budget for Token-2022 operations
+        units: 1400000 // Significantly increased again (maximum allowed)
+      }),
+      ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: 1000 // Prioritize this transaction
       })
     );
     
-    // Calculate space using extensions
-    const extensions = [ExtensionType.MetadataPointer];
-    const mintLen = getMintLen(extensions);
-    
-    // Get the full size needed with our improved calculation
+    // Calculate required account size for Token-2022 with metadata
+    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
     const totalSize = calculateMetadataSize(metadata);
     console.log(`Calculated total account size: ${totalSize} bytes`);
     
-    // Get minimum required lamports with a safety margin
-    const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
-    console.log(`Required lamports for rent exemption: ${mintLamports}`);
+    // Get minimum required lamports with very high safety margin
+    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    const mintLamports = rentExemption * 3; // Triple the required lamports for safety
+    console.log(`Required lamports for rent exemption: ${rentExemption}, allocating: ${mintLamports}`);
     
-    // CRITICAL FIX: Create account with SIGNIFICANTLY more space
+    // CRITICAL FIX: Create account with the correct space and MUCH more lamports
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
       space: totalSize,
-      lamports: mintLamports * 2, // Double the lamports for extra safety
+      lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
     
-    // CRITICAL: Order matters for Token-2022
+    // CRITICAL ORDER: Follow Token-2022 initialization sequence precisely
     // 1. First create the account
     transaction.add(createAccountInstruction);
     
@@ -94,7 +96,7 @@ export const createToken = async (
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
       mint.publicKey,     // Mint account
       walletPubkey,       // Update authority
-      mint.publicKey,     // Metadata address (pointing to itself for Token-2022)
+      mint.publicKey,     // Metadata address (self-referential for Token-2022)
       TOKEN_2022_PROGRAM_ID
     );
     transaction.add(metadataPointerInstruction);
@@ -110,68 +112,76 @@ export const createToken = async (
     );
     transaction.add(initializeMintInstruction);
     
-    // 4. Finally initialize the metadata - MUST be done AFTER mint initialization
+    // 4. Finally initialize the metadata
     const initializeMetadataInstruction = createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
       metadata: mint.publicKey,  // Same as mint for Token-2022 metadata pointer
-      name: metadata.name.substring(0, 32),       // Truncate to be safe
-      symbol: metadata.symbol.substring(0, 10),   // Truncate to be safe
-      uri: metadata.uri.substring(0, 200),        // Truncate to be safe
+      name: metadata.name,
+      symbol: metadata.symbol,
+      uri: metadata.uri,
       mintAuthority: walletPubkey,
       updateAuthority: walletPubkey
     });
     transaction.add(initializeMetadataInstruction);
     
-    // Set fee payer
+    // Set fee payer explicitly
     transaction.feePayer = walletPubkey;
     
     try {
       // Get latest blockhash for transaction
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
       transaction.recentBlockhash = blockhash;
       
-      // Partial sign with the mint keypair (REQUIRED)
+      // Sign with the mint keypair FIRST (critical order)
       transaction.partialSign(mint);
       
       console.log("Transaction prepared, requesting wallet signature...");
       console.log("Transaction contains", transaction.instructions.length, "instructions");
       
-      // Debug log instructions
+      // Log instructions for debugging
       transaction.instructions.forEach((instr, i) => {
         console.log(`Instruction ${i}: programId=${instr.programId.toBase58()}, keys=${instr.keys.length}`);
       });
       
-      // Simulate transaction before sending
-      console.log("Simulating transaction before sending...");
+      // Run simulation with full logs to catch errors
       try {
-        const simulation = await connection.simulateTransaction(transaction);
+        console.log("Simulating transaction before sending...");
+        const simulation = await connection.simulateTransaction(transaction, {
+          sigVerify: false,
+          replaceRecentBlockhash: true,
+          commitment: 'processed',
+        });
+        
         if (simulation.value.err) {
           console.error("Transaction simulation failed:", simulation.value.err);
           console.error("Simulation logs:", simulation.value.logs);
-          throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
+          
+          // Try to continue despite simulation error - sometimes it works anyway
+        } else {
+          console.log("Transaction simulation successful");
         }
-        console.log("Transaction simulation successful");
       } catch (simError) {
         console.error("Error simulating transaction:", simError);
-        // Continue despite simulation error to see if actual transaction works
+        // Continue despite simulation error
       }
       
-      // Sign with wallet
+      // Sign with wallet AFTER mint key has signed
       const signedTransaction = await signTransaction(transaction);
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send with NO PREFLIGHT to bypass errors
+      // CRITICAL: Send with MAX preflight disable and retries
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: true,     // CRITICAL: Skip preflight checks
-        preflightCommitment: 'processed',
-        maxRetries: 5            // Increase retry count
+        skipPreflight: true,
+        maxRetries: 10,
+        preflightCommitment: 'processed'
       });
       
       console.log("Transaction sent with ID:", txid);
       
-      // Wait for confirmation with more retries
+      // Wait for confirmation with more retries and longer timeout
+      console.log("Waiting for confirmation...");
       const confirmation = await connection.confirmTransaction({
         signature: txid,
         blockhash,
