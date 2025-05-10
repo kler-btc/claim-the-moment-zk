@@ -1,3 +1,4 @@
+
 import { PublicKey, Connection } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { CompressionResult, EventDetails } from './types';
@@ -8,6 +9,7 @@ import {
   createTokenPool as createCompressionPool, 
   claimCompressedToken 
 } from './token';
+import { eventService, poolService, claimService } from '@/lib/db';
 
 // Create a new token for an event with metadata
 export const createEvent = async (
@@ -54,7 +56,7 @@ export const createEventTokenPool = async (
   walletPublicKey: string,
   connection: Connection,
   signTransaction: SignerWalletAdapter['signTransaction']
-): Promise<{ transactionId: string, merkleRoot: string }> => {
+): Promise<{ transactionId: string, merkleRoot: string, poolAddress: string, stateTreeAddress: string }> => {
   try {
     console.log("Creating token pool for mint:", mintAddress);
     
@@ -79,33 +81,60 @@ export const createEventTokenPool = async (
   }
 };
 
-// Get event details from local storage
+// Get event details from database
 export const getEventDetails = async (eventId: string): Promise<any> => {
   try {
-    const eventDataKey = `event-${eventId}`;
-    const storedData = localStorage.getItem(eventDataKey);
+    // Get event from persistent storage
+    const event = await eventService.getEventById(eventId);
     
-    if (storedData) {
-      return JSON.parse(storedData);
+    if (!event) {
+      console.error(`Event with ID ${eventId} not found in database`);
+      return null;
     }
     
-    return null;
+    // If the event exists, also fetch the associated pool data if available
+    const pool = await poolService.getPoolByEventId(eventId);
+    
+    // Combine event and pool data for a complete view
+    return {
+      ...event,
+      poolAddress: pool?.poolAddress || null,
+      poolTransactionId: pool?.transactionId || null,
+    };
   } catch (error) {
     console.error('Error fetching event details:', error);
     return null;
   }
 };
 
+// Get list of all events
+export const getAllEvents = async (): Promise<any[]> => {
+  try {
+    const events = await eventService.getAllEvents();
+    return events;
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    return [];
+  }
+};
+
 // Claim a token for an event
 export const claimEventToken = async (
   eventId: string,
-  recipientWallet: string
+  recipientWallet: string,
+  connection: Connection,
+  signTransaction: SignerWalletAdapter['signTransaction']
 ): Promise<boolean> => {
   console.log(`Claiming token for event ${eventId} to wallet ${recipientWallet}`);
   
   try {
     // Use the compression service to claim the token
-    const success = await claimCompressedToken(eventId, recipientWallet);
+    const success = await claimCompressedToken(
+      eventId, 
+      recipientWallet,
+      connection,
+      signTransaction
+    );
     
     if (success) {
       toast.success("Token Claimed Successfully", {
@@ -122,5 +151,25 @@ export const claimEventToken = async (
       description: error instanceof Error ? error.message : "There was an error claiming your token. Please try again."
     });
     throw new Error(`Failed to claim token: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+// Get claim history for an event
+export const getEventClaimHistory = async (eventId: string): Promise<any[]> => {
+  try {
+    return await claimService.getClaimsByEventId(eventId);
+  } catch (error) {
+    console.error('Error fetching claim history:', error);
+    return [];
+  }
+};
+
+// Get claim history for a wallet
+export const getWalletClaimHistory = async (walletAddress: string): Promise<any[]> => {
+  try {
+    return await claimService.getClaimsByWallet(walletAddress);
+  } catch (error) {
+    console.error('Error fetching wallet claim history:', error);
+    return [];
   }
 };

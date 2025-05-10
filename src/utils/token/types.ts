@@ -23,11 +23,34 @@ export interface TokenCreationResult {
 export interface TokenPoolResult {
   transactionId: string;
   merkleRoot: string;
+  poolAddress: string;
+  stateTreeAddress: string;
 }
 
 export interface TransactionSigner {
   publicKey: PublicKey;
   signTransaction: SignerWalletAdapter['signTransaction'];
+}
+
+// Enhanced compression types
+export interface CompressedTokenAccount {
+  mint: string;
+  owner: string;
+  amount: number;
+  delegate?: string;
+  state?: 'initialized' | 'frozen';
+  merkleRoot?: string;
+  leafIndex?: number;
+  validityProof?: any;
+}
+
+export interface CompressionResult {
+  eventId: string | null;
+  mintAddress: string | null;
+  transactionId: string | null;
+  merkleRoot: string | null;
+  claimUrl?: string;
+  qrCodeData?: string;
 }
 
 // Re-export EventDetails from utils/types

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getEventDetails } from '@/utils/eventServices';
+import { eventService, poolService } from '@/lib/db';
 
 export const useEventData = (eventId: string | undefined) => {
   const navigate = useNavigate();
@@ -20,7 +21,9 @@ export const useEventData = (eventId: string | undefined) => {
     setIsVerifying(true);
     try {
       console.log('Fetching event data for ID:', id);
-      const data = await getEventDetails(id);
+      
+      // Get event data from our persistent database
+      const data = await eventService.getEventById(id);
       
       if (!data) {
         console.error('Event not found');
@@ -34,17 +37,16 @@ export const useEventData = (eventId: string | undefined) => {
       console.log('Event data retrieved:', data);
       
       // Check if this event has an associated token pool
-      const poolStorageKey = `pool-${data.mintAddress}`;
-      const poolData = localStorage.getItem(poolStorageKey);
+      const poolData = await poolService.getPoolByEventId(id);
       
       // Add pool data to event data if available
-      if (poolData) {
-        const poolInfo = JSON.parse(poolData);
-        data.poolAddress = poolInfo.poolAddress;
-        data.poolTransactionId = poolInfo.transactionId;
-      }
+      const eventWithPool = {
+        ...data,
+        poolAddress: poolData?.poolAddress,
+        poolTransactionId: poolData?.transactionId
+      };
       
-      setEventData(data);
+      setEventData(eventWithPool);
     } catch (error) {
       console.error('Error fetching event data:', error);
       toast.error("Error", {

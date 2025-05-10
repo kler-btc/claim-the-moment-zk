@@ -1,89 +1,115 @@
 
-import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, TransactionInstruction, SendTransactionError } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'sonner';
-import { TOKEN_2022_PROGRAM_ID } from '../types';
-import { createBuffer } from '../../buffer';
+import { transfer } from '@lightprotocol/compressed-token';
+import { eventService, poolService, claimService } from '@/lib/db';
 
 // On-demand claim a compressed token
 export const claimCompressedToken = async (
   eventId: string,
   recipientWallet: string,
-  connection?: Connection,
-  signTransaction?: SignerWalletAdapter['signTransaction']
+  connection: Connection,
+  signTransaction: SignerWalletAdapter['signTransaction']
 ): Promise<boolean> => {
   try {
     console.log(`Claiming compressed token for event ${eventId} to wallet ${recipientWallet}`);
     
-    // Get the event data
-    const eventDataKey = `event-${eventId}`;
-    const eventDataStr = localStorage.getItem(eventDataKey);
-    
-    if (!eventDataStr) {
-      throw new Error(`Event ${eventId} not found`);
-    }
-    
-    const eventData = JSON.parse(eventDataStr);
-    const mintAddress = eventData.mintAddress;
-    
-    // Get the token pool data
-    const poolStorageKey = `pool-${mintAddress}`;
-    const poolDataStr = localStorage.getItem(poolStorageKey);
-    
-    if (!poolDataStr) {
-      throw new Error(`Token pool for ${mintAddress} not found. Please ensure the event has a token pool created.`);
-    }
-    
-    const poolData = JSON.parse(poolDataStr);
-    const poolAddress = poolData.poolAddress;
-    
-    // Get or initialize claims array for this event
-    const claimsKey = `claims-${eventId}`;
-    const existingClaims = JSON.parse(localStorage.getItem(claimsKey) || '[]');
-    
-    // Check if this wallet has already claimed
-    if (existingClaims.includes(recipientWallet)) {
+    // Check if this wallet already claimed a token for this event
+    const hasClaimed = await claimService.hasWalletClaimedEvent(eventId, recipientWallet);
+    if (hasClaimed) {
       throw new Error('You have already claimed a token for this event');
     }
     
-    // In a real implementation with a connected wallet, we would create and send a transaction:
-    if (connection && signTransaction) {
-      // 1. Create a transaction to mint a compressed token directly to the recipient
-      const mintPubkey = new PublicKey(mintAddress);
-      const recipientPubkey = new PublicKey(recipientWallet);
-      const poolPubkey = new PublicKey(poolAddress);
-      
-      // Create a claim instruction (simplified version of Light Protocol's API)
-      const claimInstruction = new TransactionInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        keys: [
-          { pubkey: poolPubkey, isSigner: false, isWritable: true },
-          { pubkey: mintPubkey, isSigner: false, isWritable: true },
-          { pubkey: recipientPubkey, isSigner: false, isWritable: true },
-          // Creator wallet would be needed here in a real implementation
-        ],
-        data: createBuffer(Buffer.from([0x08, 0x01])) // Fake instruction code for demo
-      });
-      
-      const tx = new Transaction().add(claimInstruction);
-      
-      // Sign and send the transaction
-      // Additional code would be needed here for real implementation
-      
-      console.log('Claim transaction would be sent here in a real implementation');
+    // Get the event data from persistent storage
+    const eventData = await eventService.getEventById(eventId);
+    if (!eventData) {
+      throw new Error(`Event ${eventId} not found`);
     }
     
-    // For our demo, we'll simulate a successful claim by storing in localStorage
-    existingClaims.push(recipientWallet);
-    localStorage.setItem(claimsKey, JSON.stringify(existingClaims));
+    const mintAddress = eventData.mintAddress;
+    const creatorWallet = eventData.creator;
     
-    console.log(`Token claimed successfully for ${recipientWallet}`);
+    // Get the token pool data
+    const poolData = await poolService.getPoolByMintAddress(mintAddress);
+    if (!poolData) {
+      throw new Error(`Token pool for ${mintAddress} not found. Please ensure the event has a token pool created.`);
+    }
     
-    toast.success("Token Claimed Successfully", {
-      description: "You have successfully claimed the compressed token for this event."
+    // Record the pending claim before executing the transaction
+    const claimId = await claimService.saveClaim({
+      eventId,
+      walletAddress: recipientWallet,
+      status: 'pending',
+      createdAt: new Date().toISOString()
     });
     
-    return true;
+    console.log(`Initiating transfer of 1 token from ${creatorWallet} to ${recipientWallet}`);
+    
+    try {
+      // Convert string addresses to PublicKey objects
+      const mintPubkey = new PublicKey(mintAddress);
+      const recipientPubkey = new PublicKey(recipientWallet);
+      const creatorPubkey = new PublicKey(creatorWallet);
+      
+      // Call Light Protocol's transfer function to move a compressed token
+      const transferTxId = await transfer(
+        connection,
+        {
+          publicKey: creatorPubkey,
+          signTransaction
+        },
+        mintPubkey,
+        1, // Transfer 1 token
+        {
+          publicKey: creatorPubkey,
+          signTransaction
+        },
+        recipientPubkey
+      );
+      
+      console.log('Transfer transaction sent with ID:', transferTxId);
+      
+      // Wait for confirmation
+      const latestBlockhash = await connection.getLatestBlockhash();
+      await connection.confirmTransaction({
+        signature: transferTxId,
+        ...latestBlockhash
+      }, 'confirmed');
+      
+      console.log(`Token transfer confirmed with txId: ${transferTxId}`);
+      
+      // Update claim record with success status
+      await claimService.updateClaimStatus(claimId, 'confirmed', transferTxId);
+      
+      toast.success("Token Claimed Successfully", {
+        description: "You have successfully claimed a compressed token for this event."
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error during token claim transaction:', error);
+      
+      let errorMessage = "Failed to claim token";
+      
+      // Extract detailed error information from SendTransactionError
+      if (error instanceof SendTransactionError && error.logs) {
+        console.error('Transaction log details:', error.logs);
+        errorMessage = `Transaction error: ${error.logs.join('\n')}`;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // Update claim record with failure status
+      await claimService.updateClaimStatus(claimId, 'failed', undefined, errorMessage);
+      
+      toast.error("Error Claiming Token", {
+        description: errorMessage
+      });
+      
+      throw new Error(`Failed to claim token: ${errorMessage}`);
+    }
+    
   } catch (error) {
     console.error('Error claiming compressed token:', error);
     toast.error("Error Claiming Token", {

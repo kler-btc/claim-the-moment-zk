@@ -21,6 +21,12 @@ export const SiteHeader: React.FC = () => {
             <Link to="/claim" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
               Claim Token
             </Link>
+            <Link to="/events" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
+              My Events
+            </Link>
+            <Link to="/my-tokens" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
+              My Tokens
+            </Link>
           </nav>
         </div>
 
@@ -64,6 +70,20 @@ export const SiteHeader: React.FC = () => {
               onClick={() => setIsMenuOpen(false)}
             >
               Claim Token
+            </Link>
+            <Link 
+              to="/events" 
+              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              My Events
+            </Link>
+            <Link 
+              to="/my-tokens" 
+              className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              My Tokens
             </Link>
           </nav>
         </div>

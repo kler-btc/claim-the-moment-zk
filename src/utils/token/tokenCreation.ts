@@ -5,7 +5,7 @@ import {
   Transaction,
   SystemProgram,
   Connection,
-  LAMPORTS_PER_SOL
+  SendTransactionError
 } from '@solana/web3.js';
 import { 
   createInitializeMintInstruction,
@@ -17,9 +17,10 @@ import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata, TokenCreationResult, EventDetails, TOKEN_2022_PROGRAM_ID } from './types';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { calculateMetadataSize } from './tokenMetadataUtils';
+import { eventService } from '@/lib/db';
 
 /**
- * Creates a token with metadata
+ * Creates a token with metadata using Token-2022 program
  */
 export const createToken = async (
   eventDetails: EventDetails,
@@ -57,19 +58,26 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate adequate space for the mint account including all extensions
-    const totalSize = calculateMetadataSize(metadata);
+    // Calculate space required for the mint account with all extensions
+    // Use getMintLen for accurate sizing with Token-2022 and MetadataPointer
+    const extensions = [ExtensionType.MetadataPointer];
+    const baseSize = getMintLen(extensions);
     
-    // Calculate minimum required lamports for rent exemption
+    // Calculate additional space needed for metadata
+    const metadataSize = calculateMetadataSize(metadata);
+    const totalSize = baseSize + metadataSize;
+    
+    console.log(`Creating mint account with base size: ${baseSize}, metadata size: ${metadataSize}, total: ${totalSize}`);
+    
+    // Get minimum required lamports for rent exemption with the calculated space
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
-    
-    console.log(`Creating mint account with size: ${totalSize}, lamports: ${mintLamports}`);
+    console.log(`Required lamports for rent exemption: ${mintLamports}`);
     
     // Step 1: Create account for the mint with sufficient space allocation
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: totalSize, 
+      space: totalSize,
       lamports: mintLamports,
       programId: TOKEN_2022_PROGRAM_ID
     });
@@ -131,7 +139,7 @@ export const createToken = async (
       
       // Send the transaction with preflight checks disabled to get full error logs
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: true, // Disable preflight to get full error logs
+        skipPreflight: false, // Enable preflight checks for better error messages
         preflightCommitment: 'confirmed',
         maxRetries: 5
       });
@@ -146,15 +154,15 @@ export const createToken = async (
         lastValidBlockHeight: lastValidBlockHeight 
       }, 'confirmed');
       
-      // Store event data in local storage
-      const eventDataKey = `event-${eventId}`;
-      localStorage.setItem(eventDataKey, JSON.stringify({
+      // Store event data in persistent database
+      await eventService.saveEvent({
         id: eventId,
         mintAddress: mint.publicKey.toBase58(),
         ...eventDetails,
         createdAt: new Date().toISOString(),
-        creator: walletAddress
-      }));
+        creator: walletAddress,
+        transactionId: txid
+      });
       
       console.log('Token created successfully with txid:', txid);
       
@@ -163,29 +171,31 @@ export const createToken = async (
         mintAddress: mint.publicKey.toBase58(),
         transactionId: txid
       };
-    } catch (error: any) {
-      // Enhanced error handling with detailed log extraction
+    } catch (error) {
       console.error('Error sending transaction:', error);
       
-      // Extract logs for better error reporting
-      let errorMessage = "Transaction failed";
-      let errorLogs: string[] = [];
-      
-      if (error.logs) {
-        errorLogs = error.logs;
-        console.error('Transaction log details:', errorLogs.join('\n'));
+      // Enhanced error handling for SendTransactionError
+      if (error instanceof SendTransactionError) {
+        console.error('Transaction error details:', error.logs);
+        
+        // Extract specific error information from logs if available
+        let errorMessage = "Transaction failed";
+        if (error.logs) {
+          const relevantErrorLog = error.logs.find(log => 
+            log.includes('Error') || 
+            log.includes('failed') || 
+            log.includes('InvalidAccountData')
+          );
+          
+          if (relevantErrorLog) {
+            errorMessage = relevantErrorLog;
+          }
+        }
+        
+        throw new Error(`Token creation failed: ${errorMessage}`);
       }
       
-      // Check for specific error patterns in the logs
-      if (errorLogs.some(log => log.includes('InvalidAccountData'))) {
-        errorMessage = "Token creation failed: Invalid account data. Check logs for details.";
-      } else if (errorLogs.some(log => log.includes('insufficient funds'))) {
-        errorMessage = "Insufficient SOL to complete this operation.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      throw new Error(errorMessage);
+      throw error;
     }
   } catch (error) {
     console.error('Error creating token:', error);

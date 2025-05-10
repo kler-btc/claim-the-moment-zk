@@ -3,25 +3,30 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
-import { claimCompressedToken } from '@/utils/token/compression/claimOperations';
 import { verifyTokenClaim } from '@/utils/compressionApi';
+import { claimService } from '@/lib/db';
+import { claimCompressedToken } from '@/utils/token/compression/claimOperations';
 
 export const useTokenClaiming = (eventId: string | undefined) => {
   const { connection } = useConnection();
   const { connected, publicKey, signTransaction } = useWallet();
   const [isClaiming, setIsClaiming] = useState(false);
-  const [hasClaimed, setHasClaimed] = useState(false);
+  const [hasClaimed, setHasClaimed] = useState<boolean | null>(null);
 
   // Effect to verify if the user has already claimed a token
   useEffect(() => {
     const checkTokenClaim = async () => {
       if (connected && publicKey && eventId) {
         try {
+          // Use our database to check claim status
           const hasAlreadyClaimed = await verifyTokenClaim(eventId, publicKey.toString());
           setHasClaimed(hasAlreadyClaimed);
         } catch (error) {
           console.error('Error verifying token claim:', error);
+          setHasClaimed(null);
         }
+      } else {
+        setHasClaimed(null);
       }
     };
 
