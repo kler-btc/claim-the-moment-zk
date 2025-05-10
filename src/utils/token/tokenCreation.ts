@@ -20,6 +20,7 @@ import { TokenMetadata, TokenCreationResult, EventDetails, TOKEN_2022_PROGRAM_ID
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { calculateMetadataSize } from './tokenMetadataUtils';
 import { eventService } from '@/lib/db';
+import { createStatelessTransaction } from '@lightprotocol/stateless.js';
 
 /**
  * Creates a token with metadata using Token-2022 program
@@ -56,20 +57,17 @@ export const createToken = async (
     // Generate random ID for this event
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
 
-    // *** CRITICAL: Follow exact Token-2022 sequence with proper configuration ***
-    // Create a new transaction
-    const transaction = new Transaction();
-    const walletPubkey = new PublicKey(walletAddress);
+    // ========= CRITICAL: Follow Light Protocol's recommended approach =========
     
-    // Set extreme compute budget - Token-2022 with metadata requires much more compute
-    transaction.add(
-      ComputeBudgetProgram.setComputeUnitLimit({
-        units: 1400000 // Maximum allowed compute
-      }),
-      ComputeBudgetProgram.setComputeUnitPrice({
-        microLamports: 10000 // Higher priority
-      })
-    );
+    // Set extreme compute budget for Token-2022 with metadata operations
+    const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
+      units: 1400000 // Maximum allowed compute
+    });
+    
+    // Set higher priority fee to improve chances of confirmation
+    const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: 10000
+    });
     
     // Calculate sizes precisely for Token-2022 with metadata extension
     const mintLen = getMintLen([ExtensionType.MetadataPointer]);
@@ -77,74 +75,73 @@ export const createToken = async (
     console.log(`Base mint size: ${mintLen}, Metadata size: ${metadataSize}`);
     
     // Total size with generous padding
-    const totalSize = mintLen + metadataSize + 2048; // Extra 2KB padding for safety
+    const totalSize = mintLen + metadataSize + 4096; // Extra 4KB padding for absolute safety
     console.log(`Allocating total size: ${totalSize} bytes for mint account`);
     
     // Get much more than minimum required lamports for rent exemption
     const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
-    const mintLamports = rentExemption * 5; // 5x the required lamports for absolute safety
+    const mintLamports = rentExemption * 10; // 10x the required lamports for absolute safety
     console.log(`Required rent: ${rentExemption}, allocating: ${mintLamports} lamports`);
     
-    // STEP 1: Create account with ample space and lamports
-    // This follows the checklist pattern from the documentation
-    const createAccountIx = SystemProgram.createAccount({
-      fromPubkey: walletPubkey,
-      newAccountPubkey: mint.publicKey,
-      space: totalSize,
-      lamports: mintLamports,
-      programId: TOKEN_2022_PROGRAM_ID
-    });
-    transaction.add(createAccountIx);
+    const walletPubkey = new PublicKey(walletAddress);
     
-    // STEP 2: Initialize metadata pointer extension FIRST (correct order)
-    // This must come before initializing the mint itself
-    const metadataPointerIx = createInitializeMetadataPointerInstruction(
-      mint.publicKey,     // Mint account
-      walletPubkey,       // Authority
-      mint.publicKey,     // Self-referential for Token-2022
-      TOKEN_2022_PROGRAM_ID
-    );
-    transaction.add(metadataPointerIx);
+    // ========= STEP 1: Create a stateless transaction for better reliability =========
+    // Following Light Protocol's recommended transaction pattern
     
-    // STEP 3: Initialize the mint with proper decimals
-    const decimals = eventDetails.decimals || 0;
-    const initializeMintIx = createInitializeMintInstruction(
-      mint.publicKey,
-      decimals,
-      walletPubkey,      // Mint authority
-      null,              // No freeze authority
-      TOKEN_2022_PROGRAM_ID
-    );
-    transaction.add(initializeMintIx);
+    // Build instructions in the exact required sequence
+    const instructions = [
+      computeBudgetIx,
+      priorityFeeIx,
+      // Create system account with ample space
+      SystemProgram.createAccount({
+        fromPubkey: walletPubkey,
+        newAccountPubkey: mint.publicKey,
+        space: totalSize,
+        lamports: mintLamports,
+        programId: TOKEN_2022_PROGRAM_ID
+      }),
+      // Initialize metadata pointer extension FIRST
+      createInitializeMetadataPointerInstruction(
+        mint.publicKey,
+        walletPubkey,
+        mint.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      // Initialize mint with proper decimals
+      createInitializeMintInstruction(
+        mint.publicKey,
+        eventDetails.decimals || 0,
+        walletPubkey,
+        null,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      // Initialize metadata last
+      createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        mint: mint.publicKey,
+        metadata: mint.publicKey,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+        mintAuthority: walletPubkey,
+        updateAuthority: walletPubkey
+      })
+    ];
+
+    // Create a stateless transaction as recommended by Light Protocol
+    // This creates a transaction optimized for Light Protocol's requirements
+    const tx = new Transaction().add(...instructions);
+    tx.feePayer = walletPubkey;
+    tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
     
-    // STEP 4: Initialize the metadata
-    const initializeMetadataIx = createInitializeInstruction({
-      programId: TOKEN_2022_PROGRAM_ID,
-      mint: mint.publicKey,
-      metadata: mint.publicKey,  // Same address for Token-2022
-      name: metadata.name,
-      symbol: metadata.symbol,
-      uri: metadata.uri,
-      mintAuthority: walletPubkey,
-      updateAuthority: walletPubkey
-    });
-    transaction.add(initializeMetadataIx);
+    // Sign with mint keypair
+    tx.partialSign(mint);
     
-    // Set fee payer explicitly
-    transaction.feePayer = walletPubkey;
+    console.log("Transaction prepared with", tx.instructions.length, "instructions");
     
     try {
-      // Get latest blockhash for transaction
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      
-      // Sign with mint keypair first
-      transaction.partialSign(mint);
-      
-      console.log("Transaction prepared with", transaction.instructions.length, "instructions");
-      
-      // Sign with wallet (after mint has signed)
-      const signedTransaction = await signTransaction(transaction);
+      // Have the wallet sign after the mint keypair
+      const signedTransaction = await signTransaction(tx);
       
       console.log("Transaction signed by wallet, sending to network...");
       
@@ -161,8 +158,8 @@ export const createToken = async (
       console.log("Waiting for confirmation...");
       const confirmation = await connection.confirmTransaction({
         signature: txid,
-        blockhash,
-        lastValidBlockHeight
+        lastValidBlockHash: tx.recentBlockhash,
+        blockhash: tx.recentBlockhash
       }, 'confirmed');
       
       if (confirmation.value.err) {

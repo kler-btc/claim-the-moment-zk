@@ -36,9 +36,10 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   // Calculate total size with alignment requirements
   const totalMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalMetadataSize;
   
-  // Critical: Add significant padding for Token-2022 metadata (increased to 2048)
+  // Critical: Add extreme padding for Token-2022 metadata (increased to 4096)
   // This is essential as Token-2022 requires much more space than expected
-  const SIZE_WITH_PADDING = BASE_MINT_SIZE + METADATA_POINTER_SIZE + totalMetadataSize + 2048; 
+  // Light Protocol recommends extremely generous sizing
+  const SIZE_WITH_PADDING = BASE_MINT_SIZE + METADATA_POINTER_SIZE + totalMetadataSize + 4096; 
   
   // Ensure alignment to 8 bytes (Solana requirement)
   return Math.ceil(SIZE_WITH_PADDING / 8) * 8;
