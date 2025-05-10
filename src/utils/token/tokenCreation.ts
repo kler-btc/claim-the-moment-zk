@@ -6,7 +6,8 @@ import {
   SystemProgram,
   Connection,
   SendTransactionError,
-  ComputeBudgetProgram
+  ComputeBudgetProgram,
+  Signer
 } from '@solana/web3.js';
 import { 
   createInitializeMintInstruction,
@@ -147,11 +148,16 @@ export const createToken = async (
       // Run simulation with full logs to catch errors
       try {
         console.log("Simulating transaction before sending...");
-        const simulation = await connection.simulateTransaction(transaction, {
-          sigVerify: false,
-          replaceRecentBlockhash: true,
-          commitment: 'processed',
-        });
+        // FIXED: Correctly use simulateTransaction with proper parameters
+        // Use an array of signers instead of an options object
+        const signers: Signer[] = [mint]; 
+        const includeAccounts = true; // To include accounts in the response
+        
+        const simulation = await connection.simulateTransaction(
+          transaction,
+          signers,
+          includeAccounts
+        );
         
         if (simulation.value.err) {
           console.error("Transaction simulation failed:", simulation.value.err);
