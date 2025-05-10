@@ -10,58 +10,47 @@ import { TokenMetadata } from './types';
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   // For SPL Token-2022 with metadata extension, we need precise size allocation
   
-  // BASE MINT SIZE MUST BE EXACTLY CORRECT
+  // BASE_MINT_SIZE for Token-2022 standard mint
   const BASE_MINT_SIZE = 82;
   
-  // METADATA POINTER extension size needs to be precise
-  const METADATA_POINTER_EXTENSION_SIZE = 34; // 1 (type) + 1 (length) + 32 (authority)
+  // Metadata pointer extension size
+  const METADATA_POINTER_SIZE = 33; // 1 (type) + 32 (authority)
   
-  // Size for metadata fields - known required sizes from SPL-Token-Metadata spec
-  const METADATA_HEADER_SIZE = 1 + 32 + 4; // TLV header size + mint pubkey
-  
-  // String data storage in Token-2022 metadata:
-  // Each string has 4 bytes for length prefix + actual UTF-8 bytes
+  // Size for metadata - Token-2022 uses specific TLV format
+  // Each string field requires 4 bytes for length + actual string bytes
   const nameSize = 4 + Buffer.from(metadata.name || "").length;
   const symbolSize = 4 + Buffer.from(metadata.symbol || "").length;
   const uriSize = 4 + Buffer.from(metadata.uri || "").length;
   
-  // Additional metadata fields size
-  let additionalSize = 0;
+  // Additional metadata fields size calculation
+  let additionalMetadataSize = 4; // Size for number of additional fields
   if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
-    // Count 4 bytes for the number of additional fields
-    additionalSize = 4;
-    
     for (const [key, value] of metadata.additionalMetadata) {
-      // Each key and value has 4 bytes for length + actual bytes
-      additionalSize += 4 + Buffer.from(key).length;
-      additionalSize += 4 + Buffer.from(value).length;
+      // Each key-value pair requires size for both strings
+      additionalMetadataSize += 4 + Buffer.from(key).length;
+      additionalMetadataSize += 4 + Buffer.from(value).length;
     }
   }
   
-  // Calculate total size needed for metadata plus account data
-  const totalMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalSize;
+  // Add header size for metadata TLV format
+  const METADATA_HEADER_SIZE = 2 + 32; // type + length + mint pubkey
   
-  // Add extra padding - critical for account creation
-  // The Solana runtime requires the account to be exactly the right size
-  const totalSize = BASE_MINT_SIZE + METADATA_POINTER_EXTENSION_SIZE + totalMetadataSize + 1024; // Added generous padding
+  // Calculate total size with proper alignment and padding
+  // Token-2022 metadata needs to be properly sized
+  const totalMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalMetadataSize;
   
-  console.log(`Mint base size: ${BASE_MINT_SIZE}`);
-  console.log(`MetadataPointer extension size: ${METADATA_POINTER_EXTENSION_SIZE}`);
-  console.log(`Metadata content size: ${totalMetadataSize}`);
-  console.log(`Total calculated mint account size: ${totalSize} bytes`);
-  
-  return totalSize;
-}
+  // Add padding to ensure account has sufficient space (critical for Token-2022)
+  // Exact sizing is important to avoid InvalidAccountData errors
+  return BASE_MINT_SIZE + METADATA_POINTER_SIZE + totalMetadataSize + 128; // Add some extra padding for safety
+};
 
 /**
  * Serializes the token metadata for space calculation
- * This is a replacement for the missing 'pack' function
  * @param metadata The token metadata
  * @returns The serialized metadata
  */
 export const serializeMetadata = (metadata: TokenMetadata): Uint8Array => {
-  // For implementation simplicity, we convert to JSON and use that
-  // This isn't the actual binary format used by Token-2022, but works for size estimation
+  // For implementation simplicity, we convert to JSON
   const jsonString = JSON.stringify({
     name: metadata.name,
     symbol: metadata.symbol,
@@ -71,8 +60,8 @@ export const serializeMetadata = (metadata: TokenMetadata): Uint8Array => {
   
   // Convert to UTF-8 bytes
   return new TextEncoder().encode(jsonString);
-}
+};
 
-// Constants for metadata layout (estimated values)
+// Constants for metadata layout
 export const METADATA_TYPE_SIZE = 1;
 export const METADATA_LENGTH_SIZE = 4;

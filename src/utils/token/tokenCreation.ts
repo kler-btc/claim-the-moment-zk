@@ -58,22 +58,20 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Calculate space required for the mint account with all extensions
-    // Use getMintLen for accurate sizing with Token-2022 and MetadataPointer
+    // Calculate space for accounts using Token-2022 specific calculations
+    // The exact size calculation is critical for Token-2022 programs
     const extensions = [ExtensionType.MetadataPointer];
-    const baseSize = getMintLen(extensions);
+    const mintLen = getMintLen(extensions);
     
-    // Calculate additional space needed for metadata
-    const metadataSize = calculateMetadataSize(metadata);
-    const totalSize = baseSize + metadataSize;
-    
-    console.log(`Creating mint account with base size: ${baseSize}, metadata size: ${metadataSize}, total: ${totalSize}`);
+    // Calculate total size needed for the account to store both mint data and metadata
+    const totalSize = calculateMetadataSize(metadata);
+    console.log(`Calculated mint account size: ${totalSize} bytes`);
     
     // Get minimum required lamports for rent exemption with the calculated space
     const mintLamports = await connection.getMinimumBalanceForRentExemption(totalSize);
     console.log(`Required lamports for rent exemption: ${mintLamports}`);
     
-    // Step 1: Create account for the mint with sufficient space allocation
+    // CRITICAL FIX: Create account with correct size to avoid InvalidAccountData error
     const createAccountInstruction = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
@@ -82,29 +80,30 @@ export const createToken = async (
       programId: TOKEN_2022_PROGRAM_ID
     });
     
-    // Step 2: Initialize the MetadataPointer extension
+    // Initialize the MetadataPointer extension FIRST
+    // The order of instructions is critical for Token-2022
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
-      mint.publicKey,
-      walletPubkey,
-      mint.publicKey, // Point to self for metadata
+      mint.publicKey, // Mint account
+      walletPubkey,   // Authority
+      mint.publicKey, // Self-pointer for metadata
       TOKEN_2022_PROGRAM_ID
     );
     
-    // Step 3: Initialize the mint with decimals
+    // Initialize the mint with decimals AFTER the extension
     const decimals = eventDetails.decimals || 0;
     const initializeMintInstruction = createInitializeMintInstruction(
       mint.publicKey,
       decimals,
       walletPubkey, // Mint authority
-      null, // Freeze authority (null = no freeze)
+      null,         // No freeze authority
       TOKEN_2022_PROGRAM_ID
     );
     
-    // Step 4: Initialize metadata for the token
+    // Initialize metadata AFTER mint initialization
     const initializeMetadataInstruction = createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint.publicKey,
-      metadata: mint.publicKey,
+      metadata: mint.publicKey, // Same as mint for Token-2022 metadata pointer
       name: metadata.name,
       symbol: metadata.symbol,
       uri: metadata.uri,
@@ -112,7 +111,8 @@ export const createToken = async (
       updateAuthority: walletPubkey
     });
     
-    // Add all instructions to the transaction IN THE CORRECT ORDER
+    // Add all instructions to the transaction in the correct order
+    // Order matters for Token-2022 extensions
     transaction.add(
       createAccountInstruction,
       metadataPointerInstruction,
@@ -124,10 +124,11 @@ export const createToken = async (
     transaction.feePayer = walletPubkey;
     
     try {
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      // Get latest blockhash for transaction
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       
-      // Partially sign with the mint keypair since it's a new account
+      // Partial sign with the mint keypair (required for create account)
       transaction.partialSign(mint);
       
       console.log("Transaction prepared, requesting wallet signature...");
@@ -137,24 +138,22 @@ export const createToken = async (
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send the transaction with preflight checks disabled to get full error logs
+      // Send transaction with preflight enabled for better error detection
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false, // Enable preflight checks for better error messages
-        preflightCommitment: 'confirmed',
-        maxRetries: 5
+        skipPreflight: false, // Enable preflight checks for better error detection
+        preflightCommitment: 'confirmed'
       });
       
       console.log("Transaction sent with ID:", txid);
-      console.log("Waiting for confirmation...");
       
       // Wait for confirmation with more detailed options
       await connection.confirmTransaction({
         signature: txid,
-        blockhash: blockhash,
-        lastValidBlockHeight: lastValidBlockHeight 
-      }, 'confirmed');
+        blockhash,
+        lastValidBlockHeight
+      });
       
-      // Store event data in persistent database
+      // Store event data in database
       await eventService.saveEvent({
         id: eventId,
         mintAddress: mint.publicKey.toBase58(),
@@ -174,13 +173,13 @@ export const createToken = async (
     } catch (error) {
       console.error('Error sending transaction:', error);
       
-      // Enhanced error handling for SendTransactionError
       if (error instanceof SendTransactionError) {
-        console.error('Transaction error details:', error.logs);
+        console.error('Transaction error logs:', error.logs);
         
-        // Extract specific error information from logs if available
+        // Extract specific error information from logs
         let errorMessage = "Transaction failed";
         if (error.logs) {
+          // Find the most relevant error message in the logs
           const relevantErrorLog = error.logs.find(log => 
             log.includes('Error') || 
             log.includes('failed') || 
