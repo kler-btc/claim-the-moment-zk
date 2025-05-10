@@ -1,3 +1,4 @@
+
 import { 
   Keypair,
   PublicKey,
@@ -6,7 +7,6 @@ import {
   Connection,
   SendTransactionError,
   ComputeBudgetProgram,
-  Signer
 } from '@solana/web3.js';
 import { 
   createInitializeMintInstruction,
@@ -55,7 +55,7 @@ export const createToken = async (
     // Generate random ID for this event
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
 
-    // ========= CRITICAL: Follow Light Protocol's recommended approach =========
+    // ========= CRITICAL: Fix for Account Creation and Space Allocation =========
     
     // Set extreme compute budget for Token-2022 with metadata operations
     const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
@@ -64,33 +64,34 @@ export const createToken = async (
     
     // Set higher priority fee to improve chances of confirmation
     const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: 10000
+      microLamports: 50000 // Increased for better priority
     });
     
-    // Calculate sizes precisely for Token-2022 with metadata extension
-    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
-    const metadataSize = calculateMetadataSize(metadata);
-    console.log(`Base mint size: ${mintLen}, Metadata size: ${metadataSize}`);
+    // Get the exact base size for a mint with metadata pointer extension
+    const baseMintLen = getMintLen([ExtensionType.MetadataPointer]);
+    console.log(`Base mint size with MetadataPointer extension: ${baseMintLen}`);
     
-    // Total size with generous padding
-    const totalSize = mintLen + metadataSize + 4096; // Extra 4KB padding for absolute safety
-    console.log(`Allocating total size: ${totalSize} bytes for mint account`);
+    // Calculate the total size needed with our improved calculation function
+    const totalSize = calculateMetadataSize(metadata);
+    console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
     
-    // Get much more than minimum required lamports for rent exemption
+    // Get minimum lamports needed for rent exemption with this size
     const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
-    const mintLamports = rentExemption * 10; // 10x the required lamports for absolute safety
+    // Allocate 2x the required lamports for absolute safety
+    const mintLamports = rentExemption * 2;
     console.log(`Required rent: ${rentExemption}, allocating: ${mintLamports} lamports`);
     
     const walletPubkey = new PublicKey(walletAddress);
     
-    // ========= STEP 1: Create a transaction for better reliability =========
-    // Following Light Protocol's recommended transaction pattern
+    // ========= STEP 1: Create Transaction with Proper Sequence =========
     
-    // Build instructions in the exact required sequence
+    // Build instructions in the EXACT required sequence for Token-2022
     const instructions = [
+      // 1. Set compute budget first
       computeBudgetIx,
       priorityFeeIx,
-      // Create system account with ample space
+      
+      // 2. Create system account with exact calculated space
       SystemProgram.createAccount({
         fromPubkey: walletPubkey,
         newAccountPubkey: mint.publicKey,
@@ -98,26 +99,31 @@ export const createToken = async (
         lamports: mintLamports,
         programId: TOKEN_2022_PROGRAM_ID
       }),
-      // Initialize metadata pointer extension FIRST
+      
+      // 3. CRITICAL: Initialize metadata pointer extension FIRST
+      // This must come before mint initialization
       createInitializeMetadataPointerInstruction(
         mint.publicKey,
         walletPubkey,
-        mint.publicKey,
+        mint.publicKey, // Metadata pointer points to the mint itself
         TOKEN_2022_PROGRAM_ID
       ),
-      // Initialize mint with proper decimals
+      
+      // 4. Initialize mint with proper decimals
       createInitializeMintInstruction(
         mint.publicKey,
         eventDetails.decimals || 0,
         walletPubkey,
-        null,
+        null, // No freeze authority
         TOKEN_2022_PROGRAM_ID
       ),
-      // Initialize metadata last
+      
+      // 5. Initialize metadata LAST
+      // This must come after both the pointer and mint initialization
       createInitializeInstruction({
         programId: TOKEN_2022_PROGRAM_ID,
         mint: mint.publicKey,
-        metadata: mint.publicKey,
+        metadata: mint.publicKey, // Same as mint (Token-2022 pattern)
         name: metadata.name,
         symbol: metadata.symbol,
         uri: metadata.uri,
@@ -131,13 +137,15 @@ export const createToken = async (
     tx.feePayer = walletPubkey;
     tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
     
-    // Sign with mint keypair
+    // Sign with mint keypair first
     tx.partialSign(mint);
     
     console.log("Transaction prepared with", tx.instructions.length, "instructions");
+    console.log("Instructions:", tx.instructions.map((ix, i) => 
+      `${i}: ${ix.programId.toString().substring(0, 10)}...`).join(', '));
     
     try {
-      // Have the wallet sign after the mint keypair
+      // Have the wallet sign the transaction
       const signedTransaction = await signTransaction(tx);
       
       console.log("Transaction signed by wallet, sending to network...");
@@ -151,9 +159,28 @@ export const createToken = async (
       
       console.log("Transaction sent with ID:", txid);
       
-      // Use a proper confirmation approach
+      // Use a simpler confirmation approach that works better for browsers
       console.log("Waiting for confirmation...");
-      const status = await connection.confirmTransaction(txid, 'confirmed');
+      
+      // Simplified confirmation approach - just wait for status
+      let status = null;
+      for (let i = 0; i < 30; i++) {
+        try {
+          status = await connection.getSignatureStatus(txid);
+          if (status && status.value && status.value.confirmationStatus === 'confirmed') {
+            break;
+          }
+          console.log(`Waiting for confirmation (attempt ${i+1}/30)...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (err) {
+          console.log(`Error checking confirmation: ${err}`);
+        }
+      }
+      
+      // Check for confirmation failure
+      if (!status || !status.value || status.value.confirmationStatus !== 'confirmed') {
+        throw new Error(`Transaction not confirmed after 30 seconds`);
+      }
       
       // Check for transaction errors
       if (status.value.err) {

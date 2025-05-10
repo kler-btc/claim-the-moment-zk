@@ -5,7 +5,11 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 /**
  * Light Protocol expects a signer that includes a secretKey, but browser wallets
  * never expose private keys. This adapter works around this limitation by providing
- * an interface that Light Protocol functions can use with appropriate type assertions.
+ * an interface compatible with Light Protocol's functions.
+ * 
+ * IMPORTANT: When using this adapter with Light Protocol functions, always use 'as any'
+ * type assertion. This is safe because Light Protocol only uses publicKey and 
+ * signTransaction methods at runtime, not the secretKey.
  */
 export interface LightProtocolSigner {
   publicKey: PublicKey;
@@ -16,13 +20,14 @@ export interface LightProtocolSigner {
 /**
  * Creates a Light Protocol compatible signer from a wallet adapter.
  * 
- * NOTE: This function returns an object that must be type-asserted when passed to
- * Light Protocol functions (using `as any`). This is safe at runtime because Light Protocol
- * functions only use the publicKey and signTransaction methods, not the secretKey.
+ * @example
+ * // Example usage:
+ * const lightSigner = createLightSigner(wallet.publicKey, wallet.signTransaction);
+ * const txId = await someGlightFunction(connection, lightSigner as any, ...otherParams);
  * 
  * @param publicKey - The public key of the wallet
  * @param signTransaction - The signTransaction function from the wallet adapter
- * @returns A signer object that can be used with Light Protocol functions (with type assertions)
+ * @returns A signer object that can be used with Light Protocol functions (with type assertion)
  */
 export const createLightSigner = (
   publicKey: PublicKey,
@@ -33,9 +38,8 @@ export const createLightSigner = (
     signTransaction: async (tx: Transaction | VersionedTransaction) => {
       return await signTransaction(tx);
     },
-    // Adding signAllTransactions for completeness
+    // Optional: Add signAllTransactions for batch operations
     signAllTransactions: async (txs: (Transaction | VersionedTransaction)[]) => {
-      // Sign each transaction individually
       const signedTxs = [];
       for (const tx of txs) {
         const signedTx = await signTransaction(tx);

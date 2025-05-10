@@ -1,6 +1,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import { TokenMetadata } from './types';
+import { ExtensionType, getMintLen } from '@solana/spl-token';
 
 /**
  * Calculates the required size for token metadata
@@ -10,36 +11,32 @@ import { TokenMetadata } from './types';
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   // For SPL Token-2022 with metadata extension, we need very precise size allocation
   
-  // BASE_MINT_SIZE for Token-2022 standard mint with extension
-  const BASE_MINT_SIZE = 120; // Increased from standard SPL Token's size
+  // Get the base mint size with the MetadataPointer extension
+  const baseMintLen = getMintLen([ExtensionType.MetadataPointer]);
   
-  // Metadata pointer extension size (exact size for Token-2022)
-  const METADATA_POINTER_SIZE = 40; // 1 (type) + 32 (authority) + alignment
-  
-  // Each string field requires its actual size plus length prefix
+  // Each string field requires its actual size plus length prefix (4 bytes)
   const nameSize = 4 + Buffer.from(metadata.name || "").length;
   const symbolSize = 4 + Buffer.from(metadata.symbol || "").length;
   const uriSize = 4 + Buffer.from(metadata.uri || "").length;
   
   // Additional metadata fields size calculation
-  let additionalMetadataSize = 16; // Size for number of additional fields (increased)
+  let additionalMetadataSize = 8; // Size for number of additional fields (u64)
   if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
     for (const [key, value] of metadata.additionalMetadata) {
-      additionalMetadataSize += 4 + Buffer.from(key).length + 4; // Key with length prefix + padding
-      additionalMetadataSize += 4 + Buffer.from(value).length + 4; // Value with length prefix + padding
+      additionalMetadataSize += 4 + Buffer.from(key).length; // Key with length prefix
+      additionalMetadataSize += 4 + Buffer.from(value).length; // Value with length prefix
     }
   }
   
   // Fixed header size for metadata structure
-  const METADATA_HEADER_SIZE = 32 + 32; // type + length + mint pubkey + alignment
+  const METADATA_HEADER_SIZE = 32; // type + alignment
   
   // Calculate total size with alignment requirements
   const totalMetadataSize = METADATA_HEADER_SIZE + nameSize + symbolSize + uriSize + additionalMetadataSize;
   
-  // Critical: Add extreme padding for Token-2022 metadata (increased to 4096)
-  // This is essential as Token-2022 requires much more space than expected
-  // Light Protocol recommends extremely generous sizing
-  const SIZE_WITH_PADDING = BASE_MINT_SIZE + METADATA_POINTER_SIZE + totalMetadataSize + 4096; 
+  // Apply generous padding for Token-2022 metadata (10KB)
+  // Token-2022 requires much more space than expected for proper initialization
+  const SIZE_WITH_PADDING = baseMintLen + totalMetadataSize + 10240; 
   
   // Ensure alignment to 8 bytes (Solana requirement)
   return Math.ceil(SIZE_WITH_PADDING / 8) * 8;
