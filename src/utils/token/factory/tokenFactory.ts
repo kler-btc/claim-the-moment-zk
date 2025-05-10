@@ -4,7 +4,8 @@ import {
   PublicKey,
   Transaction,
   Connection,
-  SendTransactionError
+  SendTransactionError,
+  SystemProgram
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TokenMetadata, TokenCreationResult, EventDetails } from '../types';
