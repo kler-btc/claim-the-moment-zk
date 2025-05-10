@@ -196,8 +196,13 @@ export const createToken = async (
         return { value: { err: 'timeout' } };
       });
       
-      // Check for confirmation failure
-      if (confirmed?.value?.err) {
+      // FIX: Type check for confirmation result
+      if (confirmed && 
+          typeof confirmed === 'object' && 
+          'value' in confirmed && 
+          confirmed.value && 
+          typeof confirmed.value === 'object' && 
+          'err' in confirmed.value) {
         throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmed.value.err)}`);
       }
       
