@@ -20,7 +20,7 @@ import { TokenMetadata, TokenCreationResult, EventDetails, TOKEN_2022_PROGRAM_ID
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { calculateMetadataSize } from './tokenMetadataUtils';
 import { eventService } from '@/lib/db';
-import { createStatelessTransaction } from '@lightprotocol/stateless.js';
+import { Rpc } from '@lightprotocol/stateless.js';
 
 /**
  * Creates a token with metadata using Token-2022 program
@@ -85,7 +85,7 @@ export const createToken = async (
     
     const walletPubkey = new PublicKey(walletAddress);
     
-    // ========= STEP 1: Create a stateless transaction for better reliability =========
+    // ========= STEP 1: Create a transaction for better reliability =========
     // Following Light Protocol's recommended transaction pattern
     
     // Build instructions in the exact required sequence
@@ -128,8 +128,7 @@ export const createToken = async (
       })
     ];
 
-    // Create a stateless transaction as recommended by Light Protocol
-    // This creates a transaction optimized for Light Protocol's requirements
+    // Create a standard transaction
     const tx = new Transaction().add(...instructions);
     tx.feePayer = walletPubkey;
     tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
@@ -154,12 +153,12 @@ export const createToken = async (
       
       console.log("Transaction sent with ID:", txid);
       
-      // Wait for confirmation with longer timeout
+      // Wait for confirmation with longer timeout - using the correct confirmation strategy
       console.log("Waiting for confirmation...");
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
       const confirmation = await connection.confirmTransaction({
         signature: txid,
-        lastValidBlockHash: tx.recentBlockhash,
-        blockhash: tx.recentBlockhash
+        blockhash,
       }, 'confirmed');
       
       if (confirmation.value.err) {

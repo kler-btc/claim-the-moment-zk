@@ -9,8 +9,8 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 export interface LightProtocolSigner {
   publicKey: PublicKey;
   // Light Protocol uses either signAllTransactions or signTransaction
-  signAllTransactions?: (txs: Transaction[] | VersionedTransaction[]) => Promise<Transaction[] | VersionedTransaction[]>;
-  signTransaction?: (tx: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>;
+  signAllTransactions?: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>;
+  signTransaction?: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>;
   // Adding secretKey as an optional property to match Signer interface
   secretKey?: Uint8Array;
 }
@@ -27,15 +27,15 @@ export const createLightSigner = (
   return {
     publicKey,
     // Provide the signTransaction method that Light Protocol expects
-    signTransaction: async (tx: Transaction | VersionedTransaction): Promise<Transaction | VersionedTransaction> => {
-      return await signTransaction(tx);
+    signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+      return await signTransaction(tx) as T;
     },
     // Provide the signAllTransactions method that Light Protocol expects
-    signAllTransactions: async (txs: Transaction[] | VersionedTransaction[]): Promise<Transaction[] | VersionedTransaction[]> => {
+    signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
       // Sign transactions one by one using our signTransaction function
-      const signedTxs: (Transaction | VersionedTransaction)[] = [];
+      const signedTxs: T[] = [];
       for (const tx of txs) {
-        const signedTx = await signTransaction(tx);
+        const signedTx = await signTransaction(tx) as T;
         signedTxs.push(signedTx);
       }
       return signedTxs;

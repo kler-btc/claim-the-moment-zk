@@ -1,3 +1,4 @@
+
 import { PublicKey, Transaction, TransactionInstruction, SendTransactionError } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'sonner';
@@ -57,15 +58,16 @@ export const claimCompressedToken = async (
       const lightRpc = getLightRpc();
       
       // Create Light Protocol compatible signer with our enhanced adapter
-      const creatorSigner = createLightSigner(creatorPubkey, signTransaction);
+      const lightSigner = createLightSigner(creatorPubkey, signTransaction);
       
       // Call Light Protocol's transfer function to move a compressed token
+      // Type cast as 'any' to bypass type checking since our adapter is compatible
       const transferTxId = await transfer(
-        lightRpc, // Use Light Protocol Rpc
-        creatorSigner as any, // Use our adapter with type assertion
+        lightRpc,
+        lightSigner,
         mintPubkey,
         1, // Transfer 1 token
-        creatorSigner as any, // Same signer with type assertion
+        lightSigner, // Same signer as owner
         recipientPubkey
       );
       
@@ -75,7 +77,7 @@ export const claimCompressedToken = async (
       const latestBlockhash = await connection.getLatestBlockhash();
       await connection.confirmTransaction({
         signature: transferTxId,
-        ...latestBlockhash
+        blockhash: latestBlockhash.blockhash,
       }, 'confirmed');
       
       console.log(`Token transfer confirmed with txId: ${transferTxId}`);
