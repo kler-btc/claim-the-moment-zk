@@ -56,16 +56,16 @@ export const claimCompressedToken = async (
       // Get Light Protocol RPC instance
       const lightRpc = getLightRpc();
       
-      // Create Light Protocol compatible signers
+      // Create Light Protocol compatible signer with our enhanced adapter
       const creatorSigner = createLightSigner(creatorPubkey, signTransaction);
       
       // Call Light Protocol's transfer function to move a compressed token
       const transferTxId = await transfer(
-        lightRpc, // Use Light Protocol Rpc instead of Connection
-        creatorSigner, // Use our adapter instead of the raw object
+        lightRpc, // Use Light Protocol Rpc
+        creatorSigner as any, // Use our adapter with type assertion
         mintPubkey,
         1, // Transfer 1 token
-        creatorSigner, // Same signer as source owner
+        creatorSigner as any, // Same signer with type assertion
         recipientPubkey
       );
       

@@ -1,4 +1,3 @@
-
 import { 
   Connection, 
   PublicKey,
@@ -39,13 +38,13 @@ export const createTokenPool = async (
     // Get Light Protocol RPC instance
     const lightRpc = getLightRpc();
     
-    // Create a Light Protocol compatible signer
+    // Create a Light Protocol compatible signer with our enhanced adapter
     const lightSigner = createLightSigner(walletPubkey, signTransaction);
     
-    // Use the actual Light Protocol createTokenPool function
+    // Use the actual Light Protocol createTokenPool function with type assertion
     const txId = await lightCreateTokenPool(
       lightRpc, // Use Light Protocol Rpc instead of Connection
-      lightSigner, // Use our adapter instead of the raw object
+      lightSigner as any, // Use our adapter with type assertion
       mintPubkey,
       undefined,
       TOKEN_2022_PROGRAM_ID

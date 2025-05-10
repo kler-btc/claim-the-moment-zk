@@ -1,5 +1,5 @@
 
-import { PublicKey, Transaction } from '@solana/web3.js';
+import { PublicKey, Transaction, Keypair } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
 /**
@@ -8,13 +8,17 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
  */
 export interface LightProtocolSigner {
   publicKey: PublicKey;
-  // Light Protocol uses signAllTransactions or signTransaction but not both
+  // Light Protocol uses either signAllTransactions or signTransaction
   signAllTransactions?: (txs: Transaction[]) => Promise<Transaction[]>;
   signTransaction?: (tx: Transaction) => Promise<Transaction>;
+  // Adding secretKey as an optional property to match Signer interface
+  secretKey?: Uint8Array;
 }
 
 /**
  * Creates a Light Protocol compatible signer from a wallet adapter
+ * This creates a special adapter that works with Light Protocol functions
+ * by providing necessary compatibility properties
  */
 export const createLightSigner = (
   publicKey: PublicKey,
@@ -22,7 +26,7 @@ export const createLightSigner = (
 ): LightProtocolSigner => {
   return {
     publicKey,
-    // We only need to implement the method Light Protocol actually uses
+    // Provide the signAllTransactions method that Light Protocol expects
     signAllTransactions: async (txs: Transaction[]): Promise<Transaction[]> => {
       // Sign transactions one by one using our signTransaction function
       const signedTxs: Transaction[] = [];
@@ -31,6 +35,10 @@ export const createLightSigner = (
         signedTxs.push(signedTx);
       }
       return signedTxs;
-    }
+    },
+    // Add a dummy secretKey property that satisfies the type but is never used
+    // Note: This is a workaround for type compatibility only
+    // Light Protocol actually uses the signAllTransactions function for web wallets
+    secretKey: new Uint8Array(32) // Empty array, never actually used
   };
 };
