@@ -57,15 +57,15 @@ export const claimCompressedToken = async (
       // Get Light Protocol RPC instance
       const lightRpc = getLightRpc();
       
-      // Create Light Protocol compatible signer with our enhanced adapter
+      // Create Light Protocol compatible signer
       const lightSigner = createLightSigner(creatorPubkey, signTransaction);
       
       // Call Light Protocol's transfer function to move a compressed token
-      // We now use a type assertion to 'any' to bypass type checking issues
-      // since our signer is compatible with Light Protocol's requirements at runtime
+      // Using explicit type assertion here as we know our adapter works with Light Protocol
+      // at runtime, but TypeScript doesn't know about the expected shape
       const transferTxId = await transfer(
         lightRpc,
-        lightSigner as any,
+        lightSigner as any, // Type assertion to satisfy Light Protocol's Signer requirements
         mintPubkey,
         1, // Transfer 1 token
         lightSigner as any, // Same signer as owner
@@ -75,11 +75,7 @@ export const claimCompressedToken = async (
       console.log('Transfer transaction sent with ID:', transferTxId);
       
       // Wait for confirmation (use the original connection for this)
-      const latestBlockhash = await connection.getLatestBlockhash();
-      await connection.confirmTransaction({
-        signature: transferTxId,
-        blockhash: latestBlockhash.blockhash,
-      }, 'confirmed');
+      await connection.confirmTransaction(transferTxId, 'confirmed');
       
       console.log(`Token transfer confirmed with txId: ${transferTxId}`);
       

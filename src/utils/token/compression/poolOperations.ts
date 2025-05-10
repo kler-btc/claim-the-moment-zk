@@ -1,3 +1,4 @@
+
 import { 
   Connection, 
   PublicKey,
@@ -38,13 +39,15 @@ export const createTokenPool = async (
     // Get Light Protocol RPC instance
     const lightRpc = getLightRpc();
     
-    // Create a Light Protocol compatible signer with our enhanced adapter
+    // Create a Light Protocol compatible signer
     const lightSigner = createLightSigner(walletPubkey, signTransaction);
     
-    // Use the actual Light Protocol createTokenPool function with type assertion
+    // Use Light Protocol's createTokenPool function with explicit type assertion
+    // We know our adapter works with Light Protocol at runtime, but TypeScript doesn't know
+    // about the expected shape, so we use an assertion
     const txId = await lightCreateTokenPool(
-      lightRpc, // Use Light Protocol Rpc instead of Connection
-      lightSigner as any, // Use our adapter with type assertion
+      lightRpc,
+      lightSigner as any, // Type assertion for Light Protocol compatibility
       mintPubkey,
       undefined,
       TOKEN_2022_PROGRAM_ID
@@ -52,12 +55,8 @@ export const createTokenPool = async (
     
     console.log('Token pool created with tx:', txId);
     
-    // Wait for transaction confirmation (use the original connection for this)
-    const latestBlockhash = await connection.getLatestBlockhash();
-    await connection.confirmTransaction({
-      signature: txId,
-      ...latestBlockhash
-    });
+    // Wait for transaction confirmation using a simple approach
+    await connection.confirmTransaction(txId, 'confirmed');
     
     // Calculate the pool address (PDA) to derive the same value Light Protocol uses
     const [poolAddress] = await PublicKey.findProgramAddressSync(
