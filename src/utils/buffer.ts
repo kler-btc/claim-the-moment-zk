@@ -1,6 +1,7 @@
 
 /**
  * A browser-compatible Buffer polyfill using Uint8Array
+ * With improved support for Token-2022 transactions
  */
 
 export class BufferPolyfill {
@@ -26,9 +27,34 @@ export class BufferPolyfill {
     if (Array.isArray(data)) {
       return new BufferPolyfill(data);
     } else if (typeof data === 'string') {
-      // Convert string to byte array
-      const encoder = new TextEncoder();
-      return new BufferPolyfill(encoder.encode(data));
+      // Convert string to byte array with encoding handling
+      if (encoding === 'hex') {
+        // Handle hex encoding specifically
+        const bytes = new Uint8Array(Math.floor(data.length / 2));
+        for (let i = 0; i < bytes.length; i++) {
+          const hexByte = data.substring(i * 2, i * 2 + 2);
+          bytes[i] = parseInt(hexByte, 16);
+        }
+        return new BufferPolyfill(bytes);
+      } else if (encoding === 'base64') {
+        // Handle base64 encoding if in browser
+        try {
+          const binary = atob(data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return new BufferPolyfill(bytes);
+        } catch (e) {
+          // Fallback to standard encoding if atob fails
+          const encoder = new TextEncoder();
+          return new BufferPolyfill(encoder.encode(data));
+        }
+      } else {
+        // Default to UTF-8
+        const encoder = new TextEncoder();
+        return new BufferPolyfill(encoder.encode(data));
+      }
     } else if (data instanceof Uint8Array) {
       return new BufferPolyfill(data);
     }
@@ -55,8 +81,30 @@ export class BufferPolyfill {
   }
 
   toString(encoding?: string): string {
-    const decoder = new TextDecoder();
-    return decoder.decode(this.data);
+    // Handle different encodings
+    if (encoding === 'hex') {
+      return Array.from(this.data)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    } else if (encoding === 'base64') {
+      try {
+        // Use browser's btoa if available
+        let binary = '';
+        const bytes = new Uint8Array(this.data);
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      } catch (e) {
+        // Fallback if btoa is not available
+        const decoder = new TextDecoder();
+        return decoder.decode(this.data);
+      }
+    } else {
+      // Default UTF-8
+      const decoder = new TextDecoder();
+      return decoder.decode(this.data);
+    }
   }
 
   // Implement Buffer-compatible methods
@@ -83,7 +131,22 @@ export class BufferPolyfill {
     return true;
   }
 
-  // Add additional Buffer-compatible methods as needed
+  // Add improved Buffer-compatible methods for Token transactions
+  slice(start?: number, end?: number): BufferPolyfill {
+    const slicedData = this.data.slice(start, end);
+    return new BufferPolyfill(slicedData);
+  }
+  
+  readUInt32LE(offset: number): number {
+    const view = new DataView(this.data.buffer, this.data.byteOffset, this.data.byteLength);
+    return view.getUint32(offset, true);
+  }
+  
+  writeUInt32LE(value: number, offset: number): number {
+    const view = new DataView(this.data.buffer, this.data.byteOffset, this.data.byteLength);
+    view.setUint32(offset, value, true);
+    return offset + 4;
+  }
   
   // Array-like indexed access
   [index: number]: number;
@@ -116,22 +179,69 @@ export function createBuffer(data: number[] | string | Uint8Array | BufferPolyfi
   }
 }
 
-// Create a global Buffer polyfill in browser environments
+// Create a more compatible global Buffer polyfill in browser environments
 // Use window instead of global for browser environments
 if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefined') {
   (window as any).Buffer = {
     from: (data: number[] | string | Uint8Array, encoding?: string) => {
-      const bytes = typeof data === 'string' 
-        ? new TextEncoder().encode(data)
-        : data instanceof Uint8Array 
-          ? data 
-          : new Uint8Array(data);
-          
-      return bytes as unknown as Buffer;
+      let bytes: Uint8Array;
+      
+      if (typeof data === 'string') {
+        if (encoding === 'hex') {
+          bytes = new Uint8Array(Math.floor(data.length / 2));
+          for (let i = 0; i < bytes.length; i++) {
+            const hexByte = data.substring(i * 2, i * 2 + 2);
+            bytes[i] = parseInt(hexByte, 16);
+          }
+        } else if (encoding === 'base64') {
+          try {
+            const binary = atob(data);
+            bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+          } catch (e) {
+            bytes = new TextEncoder().encode(data);
+          }
+        } else {
+          bytes = new TextEncoder().encode(data);
+        }
+      } else if (data instanceof Uint8Array) {
+        bytes = data;
+      } else {
+        bytes = new Uint8Array(data);
+      }
+      
+      // Add required Buffer-compatible methods to the Uint8Array
+      const bufferObj = bytes as any;
+      bufferObj.toString = function(encoding: string) {
+        if (encoding === 'hex') {
+          return Array.from(bytes)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+        }
+        return new TextDecoder().decode(bytes);
+      };
+      
+      return bufferObj as unknown as Buffer;
     },
+    
     alloc: (size: number) => {
-      return new Uint8Array(size) as unknown as Buffer;
+      const bytes = new Uint8Array(size);
+      // Add Buffer-compatible methods
+      const bufferObj = bytes as any;
+      bufferObj.toString = function(encoding: string) {
+        if (encoding === 'hex') {
+          return Array.from(bytes)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+        }
+        return new TextDecoder().decode(bytes);
+      };
+      
+      return bufferObj as unknown as Buffer;
     },
+    
     isBuffer: (obj: any) => {
       return obj instanceof Uint8Array || 
              (obj && typeof obj === 'object' && obj.buffer instanceof ArrayBuffer);

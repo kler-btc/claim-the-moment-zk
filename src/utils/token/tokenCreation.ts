@@ -5,7 +5,8 @@ import {
   Transaction,
   SystemProgram,
   Connection,
-  SendTransactionError
+  SendTransactionError,
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import { 
   createInitializeMintInstruction,
@@ -58,12 +59,19 @@ export const createToken = async (
     const transaction = new Transaction();
     const walletPubkey = new PublicKey(walletAddress);
     
+    // Add higher compute budget to ensure transaction doesn't fail
+    transaction.add(
+      ComputeBudgetProgram.setComputeUnitLimit({
+        units: 400000 // Increased compute budget for complex token operations
+      })
+    );
+    
     // Calculate space for accounts using Token-2022 specific calculations
     // The exact size calculation is critical for Token-2022 programs
     const extensions = [ExtensionType.MetadataPointer];
     const mintLen = getMintLen(extensions);
     
-    // Calculate total size needed for the account to store both mint data and metadata
+    // Calculate total size needed for the account with generous padding
     const totalSize = calculateMetadataSize(metadata);
     console.log(`Calculated mint account size: ${totalSize} bytes`);
     
@@ -85,7 +93,7 @@ export const createToken = async (
     const metadataPointerInstruction = createInitializeMetadataPointerInstruction(
       mint.publicKey, // Mint account
       walletPubkey,   // Authority
-      mint.publicKey, // Self-pointer for metadata
+      mint.publicKey, // Self-pointer for metadata (improved in Token-2022)
       TOKEN_2022_PROGRAM_ID
     );
     
@@ -125,13 +133,33 @@ export const createToken = async (
     
     try {
       // Get latest blockhash for transaction
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       transaction.recentBlockhash = blockhash;
       
       // Partial sign with the mint keypair (required for create account)
       transaction.partialSign(mint);
       
       console.log("Transaction prepared, requesting wallet signature...");
+      console.log("Transaction contains", transaction.instructions.length, "instructions");
+      
+      // Debug output instruction data
+      transaction.instructions.forEach((instr, i) => {
+        console.log(`Instruction ${i}: programId=${instr.programId.toBase58()}, keys=${instr.keys.length}`);
+      });
+      
+      // Simulate transaction before sending to catch potential errors
+      try {
+        const simulation = await connection.simulateTransaction(transaction);
+        if (simulation.value.err) {
+          console.error("Transaction simulation failed:", simulation.value.err);
+          console.error("Logs:", simulation.value.logs);
+          throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
+        }
+        console.log("Transaction simulation successful");
+      } catch (simError) {
+        console.error("Error simulating transaction:", simError);
+        // Continue with transaction despite simulation error
+      }
       
       // Have the wallet sign the transaction
       const signedTransaction = await signTransaction(transaction);
@@ -140,18 +168,25 @@ export const createToken = async (
       
       // Send transaction with preflight enabled for better error detection
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false, // Enable preflight checks for better error detection
-        preflightCommitment: 'confirmed'
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+        maxRetries: 3
       });
       
       console.log("Transaction sent with ID:", txid);
       
       // Wait for confirmation with more detailed options
-      await connection.confirmTransaction({
+      const confirmation = await connection.confirmTransaction({
         signature: txid,
         blockhash,
         lastValidBlockHeight
-      });
+      }, 'confirmed');
+      
+      if (confirmation.value.err) {
+        throw new Error(`Transaction failed to confirm: ${JSON.stringify(confirmation.value.err)}`);
+      }
+      
+      console.log("Transaction confirmed:", confirmation);
       
       // Store event data in database
       await eventService.saveEvent({
@@ -183,7 +218,8 @@ export const createToken = async (
           const relevantErrorLog = error.logs.find(log => 
             log.includes('Error') || 
             log.includes('failed') || 
-            log.includes('InvalidAccountData')
+            log.includes('InvalidAccountData') ||
+            log.includes('Transaction too large')
           );
           
           if (relevantErrorLog) {

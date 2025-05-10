@@ -51,9 +51,18 @@ export const useTokenCreation = (
     });
 
     try {
-      // Create the token with metadata using Token-2022
-      console.log("Sending token creation request with wallet:", walletPublicKey);
+      // Add detailed logging for debugging
+      console.log("Current connection endpoint:", connection.rpcEndpoint);
+      console.log("Wallet public key:", walletPublicKey);
+      console.log("Event details:", {
+        title: eventDetails.title,
+        symbol: eventDetails.symbol,
+        decimals: eventDetails.decimals,
+        description: eventDetails.description.slice(0, 50) + "...",
+        imageUrl: eventDetails.imageUrl
+      });
       
+      // Create the token with metadata using Token-2022
       const tokenResult = await createEvent(
         eventDetails, 
         walletPublicKey,
@@ -78,19 +87,22 @@ export const useTokenCreation = (
     } catch (error: any) {
       console.error("Error creating token:", error);
       
-      // Improved error messaging
+      // Improved error messaging with more detailed information
       let errorMessage = "Failed to mint token. Please try again.";
       
       if (error instanceof Error) {
         errorMessage = error.message;
         
-        // Check for specific error patterns
-        if (error.message.includes('invalid account data')) {
-          errorMessage = "Token creation failed due to invalid account data. This might be due to incorrect account sizing or initialization order.";
+        // Check for specific error patterns with more precise messaging
+        if (error.message.includes('InvalidAccountData')) {
+          errorMessage = "Token creation failed due to invalid account data. This might be due to sizing issues or initialization order.";
+          console.error("InvalidAccountData error - full details:", error);
         } else if (error.message.includes('insufficient funds')) {
           errorMessage = "Insufficient SOL in your wallet to create the token. Please add more SOL and try again.";
         } else if (error.message.includes('Transaction simulation failed')) {
-          errorMessage = "Transaction simulation failed. This might be due to an issue with the Solana network or account setup.";
+          errorMessage = "Transaction simulation failed. The token parameters might be incorrect or the network is congested.";
+        } else if (error.message.includes('Transaction too large')) {
+          errorMessage = "The transaction is too large. Try reducing the amount of metadata or splitting into multiple transactions.";
         }
       }
       
