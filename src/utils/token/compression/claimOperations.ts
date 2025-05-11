@@ -79,7 +79,7 @@ export const claimCompressedToken = async (
         recipientSigner as any, // Type assertion needed for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
-        recipientPubkey, // From address (must be the connected wallet)
+        recipientSigner.publicKey, // From address (must match recipientSigner's public key)
         recipientPubkey  // To address (same as from in this case - self-claim)
       );
       
