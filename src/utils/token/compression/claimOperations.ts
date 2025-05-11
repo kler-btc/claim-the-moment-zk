@@ -76,7 +76,7 @@ export const claimCompressedToken = async (
       // In browser environments, we use the actual connected wallet
       const transferTxId = await transfer(
         lightRpc,
-        recipientSigner as any, // Type assertion for Light Protocol compatibility
+        recipientSigner, // Using our light protocol compatible signer
         mintPubkey,
         1, // Transfer 1 token
         recipientPubkey, // From address (must be the connected wallet)

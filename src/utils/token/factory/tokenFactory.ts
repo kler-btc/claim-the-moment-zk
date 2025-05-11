@@ -16,7 +16,7 @@ import { saveEventData } from '../storage/eventStorage';
 import { 
   ExtensionType, 
   getMintLen,
-  getMinimumBalanceForRentExemption,
+  getMinimumBalanceForRentExemptMint,
   createInitializeMetadataPointerInstruction,
   createInitializeMintInstruction,
   createInitializeInstruction
@@ -81,8 +81,11 @@ export const createTokenWithMetadata = async (
     const totalSize = mintLen + metadataLen;
     console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
     
-    // Calculate rent exemption with the right size
-    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    // Calculate rent exemption with the right size - use getMinimumBalanceForRentExemptMint for the base,
+    // then add additional rent for the metadata section
+    const baseRentExemption = await getMinimumBalanceForRentExemptMint(connection);
+    const additionalRent = await connection.getMinimumBalanceForRentExemption(metadataLen);
+    const rentExemption = baseRentExemption + additionalRent;
     console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 1.5} lamports`);
     
     // Build transaction with proper instruction ordering

@@ -1,5 +1,5 @@
 
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Commitment } from '@solana/web3.js';
 import { createRpc } from '@lightprotocol/stateless.js';
 import { toast } from 'sonner';
 import { claimService } from '@/lib/db';
@@ -43,7 +43,7 @@ export const getLightRpc = () => {
 export const getValidityProof = async (
   connection: Connection,
   accountHash: string,
-  commitment: string = 'confirmed'
+  commitment: Commitment = 'confirmed'
 ): Promise<any> => {
   try {
     console.log(`Getting validity proof for account hash: ${accountHash}`);
