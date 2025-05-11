@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { transfer } from '@lightprotocol/compressed-token';
 import { eventService, poolService, claimService } from '@/lib/db';
 import { getLightRpc } from '@/utils/compressionApi';
-import { createLightSigner, LightSigner, BrowserSigner } from './signerAdapter';
+import { createLightSigner, LightSigner } from './signerAdapter';
 
 /**
  * Claims a compressed token for an event.
@@ -70,15 +70,12 @@ export const claimCompressedToken = async (
       console.log('Preparing transfer transaction with Light Protocol...');
       
       // Following the Light Protocol pattern in browser environments:
-      // In browser context, we use a Keypair-like object where Light Protocol
-      // will only use the publicKey for address derivation and the signTransaction
-      // function for transaction signing - never accessing the secretKey
+      // In browser context, we need a Signer-compatible object where Light Protocol
+      // will use the publicKey for address derivation and the signTransaction
+      // function for transaction signing
       const transferTxId = await transfer(
         lightRpc,
-        {
-          publicKey: recipientPubkey,
-          signTransaction  // Pass the signTransaction function directly
-        },
+        recipientSigner as any, // Type assertion needed for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
         recipientPubkey, // From address 

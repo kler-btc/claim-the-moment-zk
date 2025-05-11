@@ -1,5 +1,5 @@
 
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Signer } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
 /**
@@ -15,17 +15,23 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 export const createLightSigner = (
   walletPubkey: PublicKey,
   signTransaction: SignerWalletAdapter['signTransaction']
-) => {
+): LightSigner => {
   return {
     publicKey: walletPubkey,
-    signTransaction
+    signTransaction,
+    // Add a dummy secretKey that satisfies the Signer interface
+    secretKey: new Uint8Array(64) // This won't be used in browser environments
   };
 };
 
-export type LightSigner = ReturnType<typeof createLightSigner>;
-
-// Browser-compatible signer interface for Light Protocol
-export interface BrowserSigner {
+// Define our custom signer type that matches what Light Protocol expects in browser
+export interface LightSigner {
   publicKey: PublicKey;
+  secretKey: Uint8Array; // Required by @solana/web3.js Signer type
   signTransaction: SignerWalletAdapter['signTransaction'];
 }
+
+// Ensure our LightSigner satisfies the Signer interface
+export type BrowserCompatibleSigner = Signer & {
+  signTransaction: SignerWalletAdapter['signTransaction'];
+};

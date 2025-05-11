@@ -11,7 +11,7 @@ import * as bs58 from 'bs58';
 import { createTokenPool as lightCreateTokenPool } from '@lightprotocol/compressed-token';
 import { poolService } from '@/lib/db';
 import { getLightRpc } from '@/utils/compressionApi';
-import { createLightSigner, BrowserSigner } from './signerAdapter';
+import { createLightSigner } from './signerAdapter';
 
 // Constants for Light Protocol's programs
 const COMPRESSED_TOKEN_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
@@ -44,14 +44,14 @@ export const createTokenPool = async (
     
     console.log("Creating token pool with wallet public key:", walletPubkey.toString());
     
+    // Create Light Protocol compatible signer for the wallet
+    const lightSigner = createLightSigner(walletPubkey, signTransaction);
+    
     // Use Light Protocol's createTokenPool function with Token-2022 program ID
-    // In browser environments, Light Protocol only needs the publicKey and signTransaction
+    // We need to use a type assertion as Light Protocol's API expects a slightly different signer type
     const txId = await lightCreateTokenPool(
       lightRpc,
-      {
-        publicKey: walletPubkey,
-        signTransaction
-      },
+      lightSigner as any, // Type assertion for Light Protocol compatibility
       mintPubkey,
       undefined, // Optional fee payer (undefined = use signer)
       TOKEN_2022_PROGRAM_ID // Using Token-2022 program
