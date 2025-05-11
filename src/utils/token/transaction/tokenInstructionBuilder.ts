@@ -18,6 +18,7 @@ import { calculateMetadataSize } from '../tokenMetadataUtils';
 
 /**
  * Builds the transaction instructions for token creation
+ * FIXED VERSION: Uses much higher fixed size and compute budget
  */
 export const buildTokenCreationInstructions = (
   mint: PublicKey,
@@ -32,14 +33,13 @@ export const buildTokenCreationInstructions = (
   });
   
   // Set higher priority fee to improve chances of confirmation
-  // 100k microLamports ~= 0.0001 SOL per cu = 0.14 SOL max
   const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 100000
+    microLamports: 250000 // Increased to ensure priority processing
   });
   
-  // Use our updated function to calculate adequate space
-  const totalSize = calculateMetadataSize(metadata);
-  console.log(`Token-2022 mint+metadata size: ${totalSize} bytes`);
+  // Use our fixed large size to avoid InvalidAccountData errors
+  const totalSize = 120000; // Using consistent 120 KB allocation
+  console.log(`Using fixed account size of ${totalSize} bytes for Token-2022 mint+metadata`);
   
   // Build instructions with precise instruction ordering
   return {
@@ -48,7 +48,7 @@ export const buildTokenCreationInstructions = (
     createAccountIx: SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint,
-      space: totalSize,
+      space: totalSize, // Using fixed large size
       lamports: 0, // This will be updated with the actual rent exemption
       programId: TOKEN_2022_PROGRAM_ID
     }),

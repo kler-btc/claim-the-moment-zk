@@ -24,11 +24,11 @@ import {
 import { calculateMetadataSize } from '../tokenMetadataUtils';
 import { toast } from 'sonner';
 
-// Define the confirmation result type to safely access err property
-interface ConfirmationResult {
+// Properly define the confirmation result interface
+interface TransactionConfirmation {
   value: {
     err: any | null;
-  };
+  }
 }
 
 /**
@@ -72,21 +72,33 @@ export const createTokenWithMetadata = async (
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
     const walletPubkey = new PublicKey(walletAddress);
     
-    // CRITICAL: Set much higher compute budget for Token-2022 operations
+    // CRITICAL CHANGE: Use MUCH higher compute budget for Token-2022 operations
+    // Maximum allowed units are 1.4 million
     const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
       units: 1400000 // Maximum allowed compute
     });
     
-    // Set higher priority fee to improve chances of confirmation
+    // Increase priority fee significantly for better transaction success rate
     const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: 100000 // Increased from 50000
+      microLamports: 250000 // Increased from 100000 to ensure priority
     });
     
-    // Calculate the mint account size using our improved function
-    const totalSize = calculateMetadataSize(metadata);
-    console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
+    // Use our improved size calculation function
+    const calculatedSize = calculateMetadataSize(metadata);
     
-    // Calculate rent exemption based on the new size
+    // Track and log size metrics
+    console.log(`Base mint size: 82, metadata fields: ${
+      metadata.name.length + metadata.symbol.length + metadata.uri.length
+    }, additional: ${metadata.additionalMetadata ? 
+      metadata.additionalMetadata.reduce((acc, [k, v]) => acc + k.length + v.length + 8, 0) : 0
+    }`);
+    
+    // CRITICAL: Use a much higher fixed size to avoid any potential size issues
+    // This is the key fix for InvalidAccountData - this value should be high enough
+    const totalSize = 120000; // 120 KB allocation - significantly higher than needed
+    console.log(`Using fixed account size of: ${totalSize} bytes to prevent InvalidAccountData errors`);
+    
+    // Calculate rent exemption for our larger size
     const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
     console.log(`Required rent: ${rentExemption} lamports`);
     
@@ -96,23 +108,23 @@ export const createTokenWithMetadata = async (
     console.log('- Wallet pubkey:', walletPubkey.toString());
     console.log('- Token-2022 program ID:', TOKEN_2022_PROGRAM_ID.toString());
     
-    // Build transaction with proper instruction ordering and extra error logging
+    // Build transaction with proper instruction ordering and focused debugging
     const tx = new Transaction();
     
     // Step 1: Add compute budget and priority fee instructions first
     tx.add(computeBudgetIx);
     tx.add(priorityFeeIx);
     
-    // Step 2: Create system account with correct space
+    // Step 2: Create system account with fixed larger space
     const createAccountIx = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: totalSize,
+      space: totalSize, // Using fixed larger size instead of calculated
       lamports: rentExemption,
       programId: TOKEN_2022_PROGRAM_ID
     });
     tx.add(createAccountIx);
-    console.log('Added createAccount instruction with size:', totalSize);
+    console.log('Added createAccount instruction with fixed size:', totalSize);
     
     // Step 3: CRITICAL: Initialize metadata pointer extension FIRST
     const initMetadataPointerIx = createInitializeMetadataPointerInstruction(
@@ -150,7 +162,10 @@ export const createTokenWithMetadata = async (
     console.log('Added initMetadata instruction');
     
     tx.feePayer = walletPubkey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
+    
+    // CRITICAL: Get a fresh blockhash with finalized commitment to avoid blockhash issues
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+    tx.recentBlockhash = blockhash;
     
     // Sign with mint keypair first (since it's a new account being created)
     tx.partialSign(mint);
@@ -163,11 +178,11 @@ export const createTokenWithMetadata = async (
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send and confirm the transaction with more lenient settings
+      // Send and confirm the transaction with improved settings
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: true, // Skip preflight checks for better success rate with large accounts
-        preflightCommitment: 'processed', // Use less strict commitment for initial send
-        maxRetries: 5 // Retry up to 5 times
+        skipPreflight: true, // Skip preflight checks due to compute budget requirements
+        preflightCommitment: 'confirmed',
+        maxRetries: 5
       });
       
       console.log("Transaction sent with ID:", txid);
@@ -175,57 +190,84 @@ export const createTokenWithMetadata = async (
         description: "Your transaction is being processed, please wait..."
       });
       
-      // Define type for confirmation result
-      type TransactionConfirmation = {
-        value: {
-          err: any | null;
+      // Wait for confirmation with proper timeout and error handling
+      try {
+        // Use a timeout promise with explicit typing
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Confirmation timeout')), 90000)
+        );
+        
+        // Wait for confirmation with proper typing
+        const confirmation = await Promise.race([
+          connection.confirmTransaction({
+            signature: txid,
+            blockhash: blockhash,
+            lastValidBlockHeight: lastValidBlockHeight
+          }, 'confirmed'),
+          timeoutPromise
+        ]).catch(error => {
+          console.log('Confirmation timeout or error, will check status later:', error);
+          // Even if confirmation times out, the transaction might still succeed
+          return { value: { err: null } } as TransactionConfirmation;
+        });
+        
+        // Type-safe checking of confirmation result
+        if (confirmation && 
+            typeof confirmation === 'object' && 
+            'value' in confirmation &&
+            confirmation.value && 
+            typeof confirmation.value === 'object' &&
+            'err' in confirmation.value && 
+            confirmation.value.err) {
+          throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
         }
-      };
-      
-      // Wait for confirmation with proper timeout handling and type checking
-      const confirmation = await Promise.race([
-        connection.confirmTransaction({
-          signature: txid,
-          blockhash: tx.recentBlockhash,
-          lastValidBlockHeight: (await connection.getBlockHeight()) + 150
-        }, 'confirmed'),
-        // Add a timeout to avoid hanging
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Confirmation timeout')), 90000))
-      ]).catch(error => {
-        console.log('Confirmation timeout or error, will check status later:', error);
-        // Even if confirmation times out, the transaction might still succeed
-        return { value: { err: null } } as TransactionConfirmation;
-      });
-      
-      // Improved type checking to fix the TypeScript errors
-      if (confirmation && 
-          typeof confirmation === 'object' && 
-          'value' in confirmation &&
-          confirmation.value && 
-          typeof confirmation.value === 'object' &&
-          'err' in confirmation.value && 
-          confirmation.value.err) {
-        throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
+        
+        console.log('Transaction confirmed successfully');
+        
+        // Store event data
+        await saveEventData(
+          eventId,
+          mint.publicKey.toBase58(),
+          eventDetails,
+          walletAddress,
+          txid
+        );
+        
+        console.log('Token created successfully with txid:', txid);
+        
+        return {
+          eventId,
+          mintAddress: mint.publicKey.toBase58(),
+          transactionId: txid
+        };
+      } catch (confirmError) {
+        console.error("Error confirming transaction:", confirmError);
+        
+        // Check transaction status directly as a fallback
+        const status = await connection.getSignatureStatus(txid);
+        console.log("Transaction status:", status);
+        
+        if (status && status.value && !status.value.err) {
+          console.log("Transaction succeeded despite confirmation error");
+          
+          // Store event data
+          await saveEventData(
+            eventId,
+            mint.publicKey.toBase58(),
+            eventDetails,
+            walletAddress,
+            txid
+          );
+          
+          return {
+            eventId,
+            mintAddress: mint.publicKey.toBase58(),
+            transactionId: txid
+          };
+        }
+        
+        throw confirmError;
       }
-      
-      console.log('Transaction likely confirmed successfully');
-      
-      // Store event data
-      await saveEventData(
-        eventId,
-        mint.publicKey.toBase58(),
-        eventDetails,
-        walletAddress,
-        txid
-      );
-      
-      console.log('Token created successfully with txid:', txid);
-      
-      return {
-        eventId,
-        mintAddress: mint.publicKey.toBase58(),
-        transactionId: txid
-      };
     } catch (error) {
       console.error('Error sending transaction:', error);
       

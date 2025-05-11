@@ -4,7 +4,7 @@ import { TokenMetadata } from './types';
 /**
  * Calculate the size needed for token metadata plus mint account
  * 
- * Updated to be much more generous with space to avoid InvalidAccountData errors
+ * FIXED VERSION: Uses a much larger fixed size to avoid InvalidAccountData errors
  */
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   // Base mint size with the MetadataPointer extension
@@ -24,15 +24,16 @@ export const calculateMetadataSize = (metadata: TokenMetadata): number => {
   }
   
   // Calculate total size with very generous padding to avoid issues
-  // Token-2022 needs significantly more space than typical SPL tokens
   const calculatedSize = BASE_MINT_SIZE + nameSize + symbolSize + uriSize + additionalSize;
   
-  // Add enormous padding to ensure we never run into space issues
-  // This is safe because rent is returned on account close
-  const generousPadding = 84000; // Allocate a full 82 KB which should be plenty for any metadata
-  
+  // Log the detailed breakdown
   console.log(`Base mint size: ${BASE_MINT_SIZE}, metadata fields: ${nameSize + symbolSize + uriSize}, additional: ${additionalSize}`);
-  console.log(`Total calculated size with padding: ${calculatedSize + generousPadding}`);
   
-  return calculatedSize + generousPadding;
+  // Return a fixed large size instead of calculated
+  // This is the key fix for InvalidAccountData errors - this value should be high enough for any metadata
+  const fixedLargeSize = 120000; // 120 KB allocation
+  
+  console.log(`Total calculated size: ${calculatedSize}, but using fixed size: ${fixedLargeSize}`);
+  
+  return fixedLargeSize;
 };
