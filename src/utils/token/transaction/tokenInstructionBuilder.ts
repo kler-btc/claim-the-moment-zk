@@ -9,12 +9,11 @@ import {
   createInitializeMintInstruction, 
   ExtensionType, 
   getMintLen, 
-  createInitializeMetadataPointerInstruction, 
-  TOKEN_2022_PROGRAM_ID 
+  createInitializeMetadataPointerInstruction,
+  TOKEN_2022_PROGRAM_ID
 } from '@solana/spl-token';
 import { createInitializeInstruction } from '@solana/spl-token';
 import { TokenMetadata } from '../types';
-import { calculateMetadataSize } from '../tokenMetadataUtils';
 
 /**
  * Builds the transaction instructions for token creation
@@ -32,7 +31,7 @@ export const buildTokenCreationInstructions = (
   
   // Set higher priority fee to improve chances of confirmation
   const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 50000
+    microLamports: 100000 // Higher priority fee
   });
   
   // Calculate space correctly for Token-2022 with metadata
@@ -40,8 +39,21 @@ export const buildTokenCreationInstructions = (
   const baseMintLen = getMintLen(extensions);
   console.log(`Base mint size with MetadataPointer extension: ${baseMintLen}`);
   
-  // Calculate total size needed with padding
-  const totalSize = calculateMetadataSize(metadata);
+  // Start with a minimum size and add per-field lengths
+  const nameSize = metadata.name.length + 4; // +4 for length prefix
+  const symbolSize = metadata.symbol.length + 4;
+  const uriSize = metadata.uri.length + 4;
+  
+  // Calculate additional metadata size
+  let additionalMetadataSize = 4; // Array length prefix
+  if (metadata.additionalMetadata) {
+    for (const [key, value] of metadata.additionalMetadata) {
+      additionalMetadataSize += (key.length + 4) + (value.length + 4);
+    }
+  }
+  
+  // Calculate total size with generous padding (Token-2022 needs much more space)
+  const totalSize = Math.max(2048, baseMintLen * 3 + nameSize + symbolSize + uriSize + additionalMetadataSize);
   console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
   
   // Build instructions with precise instruction ordering

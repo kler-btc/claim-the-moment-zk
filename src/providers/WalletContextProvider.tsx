@@ -1,38 +1,39 @@
 
-import { FC, ReactNode, useMemo } from 'react';
+import React, { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { 
-  PhantomWalletAdapter, 
-  SolflareWalletAdapter,
-  // Using available adapters only
-  CoinbaseWalletAdapter 
-} from '@solana/wallet-adapter-wallets';
+import { UnsafeBurnerWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 
-// Import wallet adapter styles
+// Only import the wallets you need to avoid conflicts
+import {
+  PhantomWalletAdapter,
+  BackpackWalletAdapter,
+  SolflareWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+
+// Import styles
 import '@solana/wallet-adapter-react-ui/styles.css';
 
+// Define config types
 interface WalletContextProviderProps {
   children: ReactNode;
+  network?: WalletAdapterNetwork;
+  endpoint?: string;
 }
 
-export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children }) => {
-  // The network can be set to 'devnet', 'testnet', or 'mainnet-beta'
-  const network = WalletAdapterNetwork.Devnet;
-
-  // Helius API key for devnet
-  const HELIUS_API_KEY = '9aeaaaaa-ac88-42a4-8f49-7b0c23cee762';
-  const HELIUS_RPC_URL = `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-
-  // You can also provide a custom RPC endpoint
-  const endpoint = useMemo(() => HELIUS_RPC_URL, []);
-
+export const WalletContextProvider: FC<WalletContextProviderProps> = ({ 
+  children,
+  network = WalletAdapterNetwork.Devnet,
+  endpoint = 'https://devnet.helius-rpc.com/?api-key=4c484c87-40c1-4b40-9b2c-1e7f8b1f8b1f'
+}) => {
+  // Use memo to prevent unnecessary re-renders
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
+      new BackpackWalletAdapter(),
       new SolflareWalletAdapter(),
-      new CoinbaseWalletAdapter(),
+      new UnsafeBurnerWalletAdapter(),
     ],
     []
   );
@@ -45,3 +46,5 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children
     </ConnectionProvider>
   );
 };
+
+export default WalletContextProvider;
