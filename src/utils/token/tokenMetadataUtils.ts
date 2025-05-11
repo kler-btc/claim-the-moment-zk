@@ -1,118 +1,38 @@
 
-import { PublicKey } from '@solana/web3.js';
 import { TokenMetadata } from './types';
-import { ExtensionType, getMintLen } from '@solana/spl-token';
 
 /**
- * Calculates the required size for token metadata
- * @param metadata The token metadata
- * @returns The size in bytes required for the metadata
+ * Calculate the size needed for token metadata plus mint account
+ * 
+ * Updated to be much more generous with space to avoid InvalidAccountData errors
  */
 export const calculateMetadataSize = (metadata: TokenMetadata): number => {
-  // Get the base mint size with the MetadataPointer extension
-  const baseMintLen = getMintLen([ExtensionType.MetadataPointer]);
+  // Base mint size with the MetadataPointer extension
+  const BASE_MINT_SIZE = 82; // Token-2022 mint with metadata pointer extension
   
-  // Calculate metadata string fields precisely
-  const nameSize = Buffer.from(metadata.name || "").length;
-  const symbolSize = Buffer.from(metadata.symbol || "").length;
-  const uriSize = Buffer.from(metadata.uri || "").length;
+  // Calculate the size for each metadata field
+  const nameSize = metadata.name.length;
+  const symbolSize = metadata.symbol.length;
+  const uriSize = metadata.uri.length;
   
-  // Calculate additional metadata fields size
-  let additionalMetadataSize = 0;
-  if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
-    for (const [key, value] of metadata.additionalMetadata) {
-      additionalMetadataSize += Buffer.from(key).length;
-      additionalMetadataSize += Buffer.from(value).length;
-      additionalMetadataSize += 8; // Length prefixes and alignment
-    }
-  }
-  
-  // Calculate raw metadata size with headers and alignment
-  // Each string has a 4-byte length prefix
-  const rawMetadataSize = (nameSize + 4) + (symbolSize + 4) + (uriSize + 4) + 
-    additionalMetadataSize + 4 + // Additional 4 bytes for array length prefix
-    32; // Base structure overhead
-  
-  // CRITICAL: Token-2022 requires much more space than calculated
-  // The problem is that many implementations underestimate the space needed
-  // We'll allocate 82KB which is generous but ensures success
-  const SIZE_WITH_PADDING = baseMintLen + 82 * 1024;
-  
-  // Ensure alignment to 8 bytes (Solana requirement)
-  return Math.ceil(SIZE_WITH_PADDING / 8) * 8;
-};
-
-/**
- * Serializes the token metadata for space calculation and usage
- * @param metadata The token metadata
- * @returns The serialized metadata as Uint8Array
- */
-export const serializeMetadata = (metadata: TokenMetadata): Uint8Array => {
-  // Create a properly structured metadata object
-  const metadataObj = {
-    name: metadata.name,
-    symbol: metadata.symbol,
-    uri: metadata.uri,
-    additionalMetadata: metadata.additionalMetadata || []
-  };
-  
-  // Calculate total size needed
-  const nameBytes = new TextEncoder().encode(metadataObj.name);
-  const symbolBytes = new TextEncoder().encode(metadataObj.symbol);
-  const uriBytes = new TextEncoder().encode(metadataObj.uri);
-  
+  // Calculate additional metadata size
   let additionalSize = 0;
-  if (metadataObj.additionalMetadata.length > 0) {
-    for (const [key, value] of metadataObj.additionalMetadata) {
-      additionalSize += new TextEncoder().encode(key).length;
-      additionalSize += new TextEncoder().encode(value).length;
-      additionalSize += 8; // Length fields
-    }
+  if (metadata.additionalMetadata && metadata.additionalMetadata.length > 0) {
+    metadata.additionalMetadata.forEach(([key, value]) => {
+      additionalSize += key.length + value.length + 8; // Key length + value length + overhead
+    });
   }
   
-  // Total size with header
-  const totalSize = 8 + nameBytes.length + 8 + symbolBytes.length + 8 + uriBytes.length + 8 + additionalSize;
+  // Calculate total size with very generous padding to avoid issues
+  // Token-2022 needs significantly more space than typical SPL tokens
+  const calculatedSize = BASE_MINT_SIZE + nameSize + symbolSize + uriSize + additionalSize;
   
-  // Create buffer with proper size
-  const buffer = new Uint8Array(totalSize);
-  let offset = 0;
+  // Add enormous padding to ensure we never run into space issues
+  // This is safe because rent is returned on account close
+  const generousPadding = 84000; // Allocate a full 82 KB which should be plenty for any metadata
   
-  // Helper function to write length-prefixed string
-  const writeString = (str: string) => {
-    const bytes = new TextEncoder().encode(str);
-    // Write length (4 bytes, little endian)
-    const view = new DataView(buffer.buffer);
-    view.setUint32(offset, bytes.length, true);
-    offset += 4;
-    
-    // Write string bytes
-    buffer.set(bytes, offset);
-    offset += bytes.length;
-    
-    // Padding to 4 bytes
-    const padding = (4 - (bytes.length % 4)) % 4;
-    offset += padding;
-  };
+  console.log(`Base mint size: ${BASE_MINT_SIZE}, metadata fields: ${nameSize + symbolSize + uriSize}, additional: ${additionalSize}`);
+  console.log(`Total calculated size with padding: ${calculatedSize + generousPadding}`);
   
-  // Write name, symbol, uri
-  writeString(metadataObj.name);
-  writeString(metadataObj.symbol);
-  writeString(metadataObj.uri);
-  
-  // Write additional metadata count
-  const view = new DataView(buffer.buffer);
-  view.setUint32(offset, metadataObj.additionalMetadata.length, true);
-  offset += 4;
-  
-  // Write additional metadata pairs
-  for (const [key, value] of metadataObj.additionalMetadata) {
-    writeString(key);
-    writeString(value);
-  }
-  
-  return buffer;
+  return calculatedSize + generousPadding;
 };
-
-// Constants for metadata layout
-export const METADATA_TYPE_SIZE = 1;
-export const METADATA_LENGTH_SIZE = 4;

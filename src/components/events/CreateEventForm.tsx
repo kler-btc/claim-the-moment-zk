@@ -1,12 +1,12 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EventDetails } from '@/utils/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface CreateEventFormProps {
   eventDetails: EventDetails;
@@ -22,14 +22,43 @@ const CreateEventForm = ({
   onChange 
 }: CreateEventFormProps) => {
   const [showMetadataPreview, setShowMetadataPreview] = useState(false);
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
 
   const toggleMetadataPreview = () => {
     setShowMetadataPreview(!showMetadataPreview);
   };
 
-  // Helper for validating field lengths
-  const isSymbolTooLong = eventDetails.symbol.length > 10;
+  // Validate all fields and show appropriate errors
+  useEffect(() => {
+    const errors: {[key: string]: string} = {};
+    
+    // Symbol validation
+    if (eventDetails.symbol) {
+      if (eventDetails.symbol.length > 10) {
+        errors.symbol = "Symbol must be 10 characters or less";
+      }
+      
+      if (eventDetails.symbol.toLowerCase() === 'sol') {
+        errors.symbol = "Symbol 'SOL' is reserved. Please use a different symbol";
+      }
+    }
+    
+    // Event name validation
+    if (eventDetails.title && eventDetails.title.length > 32) {
+      errors.title = "Event name must be 32 characters or less";
+    }
+    
+    // Other validations as needed
+    if (eventDetails.attendeeCount > 1000) {
+      errors.attendeeCount = "For testing, please limit to 1000 attendees";
+    }
+    
+    setFormErrors(errors);
+  }, [eventDetails]);
 
+  // Check if form has errors
+  const hasErrors = Object.keys(formErrors).length > 0;
+  
   return (
     <Card>
       <CardHeader>
@@ -39,9 +68,18 @@ const CreateEventForm = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {hasErrors && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Please fix the highlighted errors before continuing
+            </AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Event Name</Label>
+            <Label className={formErrors.title ? "text-red-500" : ""}>Event Name</Label>
             <Input
               id="title"
               name="title"
@@ -49,13 +87,16 @@ const CreateEventForm = ({
               value={eventDetails.title}
               onChange={onChange}
               maxLength={32} // Token-2022 name limit
+              className={formErrors.title ? "border-red-500" : ""}
               required
             />
-            {eventDetails.title.length > 25 && (
+            {formErrors.title ? (
+              <p className="text-xs text-red-500">{formErrors.title}</p>
+            ) : eventDetails.title.length > 25 ? (
               <p className="text-xs text-amber-500">
                 {32 - eventDetails.title.length} characters remaining
               </p>
-            )}
+            ) : null}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -112,7 +153,7 @@ const CreateEventForm = ({
           {/* Token Metadata Fields with improved validation */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className={isSymbolTooLong ? "text-red-500" : ""}>Token Symbol</Label>
+              <Label className={formErrors.symbol ? "text-red-500" : ""}>Token Symbol</Label>
               <Input
                 id="symbol"
                 name="symbol"
@@ -120,13 +161,16 @@ const CreateEventForm = ({
                 maxLength={10}
                 value={eventDetails.symbol}
                 onChange={onChange}
-                className={isSymbolTooLong ? "border-red-500" : ""}
+                className={formErrors.symbol ? "border-red-500" : ""}
                 required
               />
-              <p className={`text-xs ${isSymbolTooLong ? "text-red-500" : "text-muted-foreground"}`}>
-                Short symbol for the token (max 10 characters)
-                {isSymbolTooLong && " - Symbol is too long"}
-              </p>
+              {formErrors.symbol ? (
+                <p className="text-xs text-red-500">{formErrors.symbol}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Short symbol for the token (max 10 characters, avoid using 'SOL')
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Token Decimals</Label>
@@ -142,7 +186,7 @@ const CreateEventForm = ({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Usually 0 for NFTs and event tokens
+                Use 0 for NFTs and event tokens
               </p>
             </div>
           </div>
@@ -164,7 +208,7 @@ const CreateEventForm = ({
           </div>
           
           <div className="space-y-2">
-            <Label>Number of Attendees (Token Supply)</Label>
+            <Label className={formErrors.attendeeCount ? "text-red-500" : ""}>Number of Attendees (Token Supply)</Label>
             <Input
               id="attendeeCount"
               name="attendeeCount"
@@ -174,13 +218,19 @@ const CreateEventForm = ({
               placeholder="100"
               value={eventDetails.attendeeCount || ''}
               onChange={onChange}
+              className={formErrors.attendeeCount ? "border-red-500" : ""}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              This determines how many compressed tokens will be minted (max 1000 for testing)
-            </p>
+            {formErrors.attendeeCount ? (
+              <p className="text-xs text-red-500">{formErrors.attendeeCount}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                This determines how many compressed tokens will be minted (max 1000 for testing)
+              </p>
+            )}
           </div>
         
+          {/* Metadata Preview Section */}
           {showMetadataPreview && (
             <div className="p-3 bg-muted rounded-md">
               <h4 className="text-sm font-medium mb-2">Metadata Preview</h4>
@@ -214,7 +264,7 @@ const CreateEventForm = ({
           <Button 
             type="submit" 
             className="w-full"
-            disabled={isLoading || isSymbolTooLong}
+            disabled={isLoading || hasErrors}
           >
             {isLoading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Compressed Token...</>

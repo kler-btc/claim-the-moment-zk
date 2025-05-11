@@ -26,18 +26,20 @@ export const buildTokenCreationInstructions = (
   decimals: number = 0
 ) => {
   // CRITICAL: Set higher compute budget for Token-2022 operations
+  // 1.4M units is the maximum allowed compute limit
   const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-    units: 1400000 // Maximum allowed compute
+    units: 1400000
   });
   
   // Set higher priority fee to improve chances of confirmation
+  // 100k microLamports ~= 0.0001 SOL per cu = 0.14 SOL max
   const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 50000
+    microLamports: 100000
   });
   
-  // Calculate space correctly using our updated function
+  // Use our updated function to calculate adequate space
   const totalSize = calculateMetadataSize(metadata);
-  console.log(`Total calculated size for mint+metadata: ${totalSize}`);
+  console.log(`Token-2022 mint+metadata size: ${totalSize} bytes`);
   
   // Build instructions with precise instruction ordering
   return {
@@ -58,7 +60,7 @@ export const buildTokenCreationInstructions = (
     ),
     initMintIx: createInitializeMintInstruction(
       mint,
-      decimals,
+      decimals, // For event tokens, usually 0 decimals
       walletPubkey,
       null, // No freeze authority
       TOKEN_2022_PROGRAM_ID
