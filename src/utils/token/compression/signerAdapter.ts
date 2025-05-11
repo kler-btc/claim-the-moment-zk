@@ -3,15 +3,20 @@ import {
   Transaction, 
   PublicKey, 
   VersionedTransaction,
-  TransactionMessage
+  TransactionMessage,
+  Signer
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
 /**
  * Adapter to make wallet signer compatible with Light Protocol
+ * Implements a Solana-compatible Signer interface
  */
-export class LightSignerAdapter {
+export class LightSignerAdapter implements Signer {
   publicKey: PublicKey;
+  // Add secretKey as required by Signer interface, but we'll use null for browser wallet
+  secretKey: Uint8Array | null = null;
+  
   private signTransaction: SignerWalletAdapter['signTransaction'];
   
   constructor(

@@ -65,8 +65,7 @@ export async function createTokenPool(
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       
       // Call Light Protocol to create token pool
-      // NOTE: Light Protocol should accept a Connection object, not an Rpc object
-      // This is likely a documentation issue or a type mismatch
+      // Fix the type assertion to properly handle the response
       const poolResponse = await lightCreateTokenPool(
         connection as any, // Type assertion to work with Light Protocol
         lightSigner,
@@ -81,8 +80,17 @@ export async function createTokenPool(
         throw new Error("No response from Light Protocol pool creation");
       }
       
-      // Extract transaction ID from the response
-      const txId = typeof poolResponse === 'string' ? poolResponse : poolResponse.toString();
+      // Extract transaction ID from the response - fix the toString issue
+      let txId: string;
+      if (typeof poolResponse === 'string') {
+        txId = poolResponse;
+      } else if (poolResponse && typeof poolResponse.toString === 'function') {
+        txId = poolResponse.toString();
+      } else {
+        // Fallback if we cannot determine the transaction ID
+        txId = "unknown-transaction-id";
+        console.warn("Could not determine transaction ID from pool response:", poolResponse);
+      }
       
       // Wait for confirmation with proper error handling
       const confirmationResult = await connection.confirmTransaction({
