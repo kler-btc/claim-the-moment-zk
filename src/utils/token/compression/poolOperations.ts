@@ -6,8 +6,7 @@ import {
   Keypair,
   VersionedTransaction,
   TransactionMessage,
-  SendOptions,
-  VersionedBlockhashRecord
+  SendOptions 
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TOKEN_2022_PROGRAM_ID, TokenPoolResult } from '../types';

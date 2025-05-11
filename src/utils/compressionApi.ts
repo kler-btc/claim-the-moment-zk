@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey, Commitment } from '@solana/web3.js';
 import { createRpc } from '@lightprotocol/stateless.js';
 import { toast } from 'sonner';
@@ -43,8 +42,7 @@ export const getLightRpc = () => {
         confirmTransactionInitialTimeout: 60000, // 60 seconds timeout for confirmations
         disableRetryOnRateLimit: false, // Enable retry on rate limit
         
-        // CRITICAL FIX: Add preflight commitment level
-        preflightCommitment: 'processed', // Use processed for faster preflight checks
+        // REMOVED: preflightCommitment as it's not a valid property of ConnectionConfig
       }
     );
     
