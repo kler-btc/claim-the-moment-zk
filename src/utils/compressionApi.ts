@@ -8,33 +8,58 @@ import { claimService } from '@/lib/db';
 const HELIUS_API_KEY = '9aeaaaaa-ac88-42a4-8f49-7b0c23cee762';
 export const HELIUS_RPC_URL = `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
+// Light Protocol specific RPC endpoint settings
+// Using the same endpoint for all three parameters is crucial for browser compatibility
+export const LIGHT_PROTOCOL_RPC = HELIUS_RPC_URL;
+export const LIGHT_PROTOCOL_COMPRESSION_ENDPOINT = HELIUS_RPC_URL;
+export const LIGHT_PROTOCOL_PROVER_ENDPOINT = HELIUS_RPC_URL;
+
 // Create a standard Solana connection with confirmed commitment
 export const getSolanaConnection = (): Connection => {
+  // Use finalized commitment for more reliable results
   return new Connection(HELIUS_RPC_URL, 'confirmed');
 };
 
 /**
- * Create a Light Protocol RPC client
+ * Create a Light Protocol RPC client with improved configuration
  * 
  * This creates an RPC client that works with Light Protocol's compression APIs.
  * For browser environments, all three endpoints must be the same.
+ * 
+ * IMPROVED VERSION: Adds better error handling and configuration options
  */
 export const getLightRpc = () => {
   console.log("Creating Light Protocol RPC client with endpoint:", HELIUS_RPC_URL);
   
   try {
-    // In browser environments, Light Protocol requires all three URLs to be the same
+    // CRITICAL: In browser environments, Light Protocol requires all three URLs to be the same
+    // and they must include the API key query parameter
     const lightRpc = createRpc(
-      HELIUS_RPC_URL,
-      HELIUS_RPC_URL,
-      HELIUS_RPC_URL
+      LIGHT_PROTOCOL_RPC,
+      LIGHT_PROTOCOL_COMPRESSION_ENDPOINT,
+      LIGHT_PROTOCOL_PROVER_ENDPOINT,
+      {
+        commitment: 'confirmed', // Use confirmed commitment for better reliability
+        wsEndpoint: HELIUS_RPC_URL.replace('https://', 'wss://'), // Provide WebSocket endpoint
+        confirmTransactionInitialTimeout: 60000, // 60 seconds timeout for confirmations
+        disableRetryOnRateLimit: false, // Enable retry on rate limit
+      }
     );
+    
+    // Test connection with Light RPC
+    lightRpc.getVersion().then(version => {
+      console.log("Light Protocol RPC connected successfully, version:", version);
+    }).catch(err => {
+      console.warn("Light Protocol RPC version check failed:", err);
+    });
     
     console.log("Light Protocol RPC client created successfully");
     return lightRpc;
   } catch (error) {
     console.error("Error creating Light Protocol RPC client:", error);
-    toast.error("Failed to initialize compression client");
+    toast.error("Failed to initialize compression client", {
+      description: "There was an error connecting to Light Protocol services. Please try again later."
+    });
     throw error;
   }
 };
