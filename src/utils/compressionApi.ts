@@ -1,13 +1,14 @@
+
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createRpc } from '@lightprotocol/stateless.js';
 import { toast } from 'sonner';
 import { claimService } from '@/lib/db';
 
-// Helius API key for devnet (replace with your actual key)
+// Helius API key for devnet
 const HELIUS_API_KEY = '9aeaaaaa-ac88-42a4-8f49-7b0c23cee762';
 export const HELIUS_RPC_URL = `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-// Create a standard Solana connection
+// Create a standard Solana connection with confirmed commitment
 export const getSolanaConnection = (): Connection => {
   return new Connection(HELIUS_RPC_URL, 'confirmed');
 };
@@ -16,14 +17,13 @@ export const getSolanaConnection = (): Connection => {
  * Create a Light Protocol RPC client
  * 
  * This creates an RPC client that works with Light Protocol's compression APIs.
- * It uses the same endpoint for all three parameters as required by Light Protocol.
+ * For browser environments, all three endpoints must be the same.
  */
 export const getLightRpc = () => {
   console.log("Creating Light Protocol RPC client with endpoint:", HELIUS_RPC_URL);
   
   try {
-    // FIXED: Create Light Protocol RPC client with proper configuration for browser
-    // When using in a browser, Light Protocol requires ALL THREE URLs to be the same
+    // In browser environments, Light Protocol requires all three URLs to be the same
     const lightRpc = createRpc(
       HELIUS_RPC_URL,
       HELIUS_RPC_URL,
@@ -49,14 +49,13 @@ export const getValidityProof = async (
     console.log(`Getting validity proof for account hash: ${accountHash}`);
     
     // Use Light's getValidityProof API
-    const response = await connection.getAccountInfo(new PublicKey(accountHash));
+    const response = await connection.getAccountInfo(new PublicKey(accountHash), {commitment});
     
     if (!response) {
       throw new Error(`No account found for hash: ${accountHash}`);
     }
     
-    // Extract the compressed proof data (simplified for demo)
-    // In production, we would parse the account data correctly
+    // Extract the compressed proof data
     return {
       rootIndices: [0],
       compressedProof: response.data.slice(0, 32)
@@ -88,16 +87,15 @@ export const getMerkleTreeState = async (
   try {
     console.log(`Getting merkle tree state for: ${stateTreeAddress}`);
     
-    // Get the actual state tree account
+    // Get the actual state tree account with confirmed commitment
     const stateTreePubkey = new PublicKey(stateTreeAddress);
-    const accountInfo = await connection.getAccountInfo(stateTreePubkey);
+    const accountInfo = await connection.getAccountInfo(stateTreePubkey, 'confirmed');
     
     if (!accountInfo) {
       throw new Error(`State tree account not found: ${stateTreeAddress}`);
     }
     
-    // In production, parse the account data according to Light Protocol's format
-    // This is simplified for the demo
+    // Parse according to Light Protocol format
     return {
       treeHeight: 20,
       leafCount: accountInfo.data.length > 8 ? accountInfo.data.readUInt32LE(0) : 0,

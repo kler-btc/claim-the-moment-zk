@@ -37,34 +37,60 @@ export const createTokenPool = async (
     const walletPubkey = new PublicKey(walletAddress);
     
     console.log("Using Light Protocol's createTokenPool with mint:", mintAddress);
+    console.log("Wallet pubkey:", walletPubkey.toString());
     
     // Get Light Protocol RPC instance
     const lightRpc = getLightRpc();
     
-    // Create a Light Protocol compatible signer
+    // Create a Light Protocol compatible signer using our adapter
     const lightSigner = createLightSigner(walletPubkey, signTransaction);
     
-    // Use Light Protocol's createTokenPool function
-    // NOTE: We use type assertion here because our adapter doesn't have a secretKey,
-    // but Light Protocol functions don't actually use the secretKey for browser wallets
+    console.log("Created light signer with public key:", lightSigner.publicKey.toString());
+    
+    // Use Light Protocol's createTokenPool function with Token-2022 program ID
+    // Note the type assertion is necessary because our signer doesn't have a real secretKey
+    // but Light Protocol doesn't actually use it in browser environments
     const txId = await lightCreateTokenPool(
       lightRpc,
       lightSigner as any, // Type assertion for Light Protocol compatibility
       mintPubkey,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
+      undefined, // Optional fee payer (undefined = use signer)
+      TOKEN_2022_PROGRAM_ID // Using Token-2022 program
     );
     
     console.log('Token pool created with tx:', txId);
     
-    // Wait for transaction confirmation
-    const status = await connection.confirmTransaction(txId, 'confirmed');
+    // Wait for transaction confirmation with retries
+    let confirmed = false;
+    let retries = 0;
+    const maxRetries = 5;
     
-    if (status.value.err) {
-      throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+    while (!confirmed && retries < maxRetries) {
+      try {
+        const status = await connection.confirmTransaction({
+          signature: txId,
+          blockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
+          lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+        }, 'confirmed');
+        
+        if (status.value.err) {
+          throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+        }
+        
+        confirmed = true;
+        console.log('Transaction confirmed successfully');
+      } catch (error) {
+        console.warn(`Confirmation attempt ${retries + 1} failed:`, error);
+        retries++;
+        
+        if (retries >= maxRetries) {
+          throw new Error(`Failed to confirm transaction after ${maxRetries} attempts`);
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
-    
-    console.log('Transaction confirmed successfully');
     
     // Calculate the pool address (PDA) to derive the same value Light Protocol uses
     const [poolAddress] = PublicKey.findProgramAddressSync(

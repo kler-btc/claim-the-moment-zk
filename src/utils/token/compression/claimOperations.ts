@@ -60,30 +60,37 @@ export const claimCompressedToken = async (
       // Convert string addresses to PublicKey objects
       const mintPubkey = new PublicKey(mintAddress);
       const recipientPubkey = new PublicKey(recipientWallet);
-      const creatorPubkey = new PublicKey(creatorWallet);
+      
+      // CRITICAL: For browser implementation, the signer must be the wallet itself
+      // We don't need the creator wallet since the caller must be the owner
       
       // Get Light Protocol RPC instance
       const lightRpc = getLightRpc();
       
-      // Create Light Protocol compatible signer
-      const lightSigner = createLightSigner(creatorPubkey, signTransaction);
+      // Create Light Protocol compatible signer for the current wallet
+      const recipientSigner = createLightSigner(recipientPubkey, signTransaction);
       
-      // Call Light Protocol's transfer function
-      // NOTE: We use type assertion here because our adapter doesn't have a secretKey,
-      // but Light Protocol functions don't actually use the secretKey for browser wallets
+      console.log('Preparing transfer transaction with Light Protocol...');
+      
+      // Call Light Protocol's transfer function with browser-compatible pattern
+      // In browser environments, we use the actual connected wallet
       const transferTxId = await transfer(
         lightRpc,
-        lightSigner as any, // Type assertion for Light Protocol compatibility
+        recipientSigner as any, // Type assertion for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
-        lightSigner as any, // Same signer as owner
-        recipientPubkey
+        recipientPubkey, // From address (must be the connected wallet)
+        recipientPubkey  // To address (same as from in this case - self-claim)
       );
       
       console.log('Transfer transaction sent with ID:', transferTxId);
       
       // Wait for confirmation with proper error handling
-      const status = await connection.confirmTransaction(transferTxId, 'confirmed');
+      const status = await connection.confirmTransaction({
+        signature: transferTxId,
+        blockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
+        lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+      }, 'confirmed');
       
       if (status.value.err) {
         throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);

@@ -5,13 +5,22 @@ import {
   Transaction,
   Connection,
   SendTransactionError,
-  SystemProgram
+  SystemProgram,
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
-import { TokenMetadata, TokenCreationResult, EventDetails } from '../types';
+import { TokenMetadata, TokenCreationResult, EventDetails, TOKEN_2022_PROGRAM_ID } from '../types';
 import { buildTokenCreationInstructions } from '../transaction/tokenInstructionBuilder';
 import { sendAndConfirmTokenTransaction } from '../transaction/tokenTransactionUtils';
 import { saveEventData } from '../storage/eventStorage';
+import { 
+  ExtensionType, 
+  getMintLen,
+  getMinimumBalanceForRentExemption,
+  createInitializeMetadataPointerInstruction,
+  createInitializeMintInstruction,
+  createInitializeInstruction
+} from '@solana/spl-token';
 
 /**
  * Creates a token with all necessary metadata
@@ -46,65 +55,115 @@ export const createTokenWithMetadata = async (
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
     const walletPubkey = new PublicKey(walletAddress);
     
-    // Get the instructions for the transaction
-    const instructions = buildTokenCreationInstructions(
-      mint.publicKey, 
-      walletPubkey, 
-      metadata, 
-      eventDetails.decimals || 0
-    );
-    
-    // Calculate rent exemption with precise size
-    const totalSize = instructions.createAccountIx.data.slice(4).readUInt32LE(4); // Extract size from instruction
-    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
-    console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 2} lamports`);
-    
-    // Update lamports value in createAccount instruction
-    const updatedCreateAccountIx = SystemProgram.createAccount({
-      fromPubkey: walletPubkey,
-      newAccountPubkey: mint.publicKey,
-      space: totalSize,
-      lamports: rentExemption * 2, // Double for safety
-      programId: instructions.createAccountIx.programId
+    // CRITICAL: Set higher compute budget for Token-2022 operations
+    const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
+      units: 1400000 // Maximum allowed compute
     });
     
-    // Build transaction with precise instruction ordering
+    // Set higher priority fee to improve chances of confirmation
+    const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: 50000
+    });
+    
+    // Calculate space correctly for Token-2022 with metadata
+    const extensions = [ExtensionType.MetadataPointer];
+    const mintLen = getMintLen(extensions);
+    console.log(`Base mint size with MetadataPointer extension: ${mintLen}`);
+    
+    // For Token-2022, we need additional space for the metadata
+    // This formula comes from Token-2022 examples for calculating total size
+    const metadataLen = Buffer.from(JSON.stringify({
+      name: metadata.name,
+      symbol: metadata.symbol,
+      uri: metadata.uri
+    })).length + 64; // Add padding for metadata structure
+    
+    const totalSize = mintLen + metadataLen;
+    console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
+    
+    // Calculate rent exemption with the right size
+    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 1.5} lamports`);
+    
+    // Build transaction with proper instruction ordering
     const tx = new Transaction().add(
       // 1. Set compute budget first
-      instructions.computeBudgetIx,
-      instructions.priorityFeeIx,
+      computeBudgetIx,
+      priorityFeeIx,
       
       // 2. Create system account with correct space
-      updatedCreateAccountIx,
+      SystemProgram.createAccount({
+        fromPubkey: walletPubkey,
+        newAccountPubkey: mint.publicKey,
+        space: totalSize,
+        lamports: Math.ceil(rentExemption * 1.5), // Add 50% for safety
+        programId: TOKEN_2022_PROGRAM_ID
+      }),
       
       // 3. CRITICAL: Initialize metadata pointer extension FIRST
-      instructions.initMetadataPointerIx,
+      createInitializeMetadataPointerInstruction(
+        mint.publicKey,
+        walletPubkey,
+        mint.publicKey, // Metadata pointer to self
+        TOKEN_2022_PROGRAM_ID
+      ),
       
       // 4. Initialize mint second
-      instructions.initMintIx,
+      createInitializeMintInstruction(
+        mint.publicKey,
+        eventDetails.decimals || 0,
+        walletPubkey,
+        null, // No freeze authority
+        TOKEN_2022_PROGRAM_ID
+      ),
       
       // 5. Initialize metadata last
-      instructions.initMetadataIx
+      createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        mint: mint.publicKey,
+        metadata: mint.publicKey,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+        mintAuthority: walletPubkey,
+        updateAuthority: walletPubkey
+      })
     );
     
     tx.feePayer = walletPubkey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash('finalized')).blockhash;
+    tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
     
     // Sign with mint keypair first (since it's a new account being created)
     tx.partialSign(mint);
     
     try {
+      console.log("Requesting wallet signature for transaction...");
+      
       // Have the wallet sign the transaction
       const signedTransaction = await signTransaction(tx);
       
       console.log("Transaction signed by wallet, sending to network...");
       
       // Send and confirm the transaction
-      const txid = await sendAndConfirmTokenTransaction(
-        connection, 
-        signedTransaction, 
-        walletPubkey
-      );
+      const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed'
+      });
+      
+      console.log("Transaction sent with ID:", txid);
+      
+      // Wait for confirmation with proper timeout handling
+      const confirmation = await connection.confirmTransaction({
+        signature: txid,
+        blockhash: tx.recentBlockhash,
+        lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+      }, 'confirmed');
+      
+      if (confirmation.value.err) {
+        throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
+      }
+      
+      console.log('Transaction confirmed successfully');
       
       // Store event data
       await saveEventData(
@@ -125,26 +184,18 @@ export const createTokenWithMetadata = async (
     } catch (error) {
       console.error('Error sending transaction:', error);
       
-      if (error instanceof SendTransactionError) {
+      if (error instanceof SendTransactionError && error.logs) {
         console.error('Transaction error logs:', error.logs);
         
         // Extract specific error information from logs
-        let errorMessage = "Transaction failed";
-        if (error.logs) {
-          // Find the most relevant error message in the logs
-          const relevantErrorLog = error.logs.find(log => 
-            log.includes('Error') || 
-            log.includes('failed') || 
-            log.includes('InvalidAccountData') ||
-            log.includes('Transaction too large')
-          );
-          
-          if (relevantErrorLog) {
-            errorMessage = relevantErrorLog;
-          }
+        for (const log of error.logs) {
+          console.error('Log:', log);
         }
         
-        throw new Error(`Token creation failed: ${errorMessage}`);
+        // Look for InvalidAccountData errors which often indicate sizing issues
+        if (error.logs.some(log => log.includes('InvalidAccountData'))) {
+          throw new Error('Token creation failed: Invalid account data error. This might be due to incorrect account size calculation.');
+        }
       }
       
       throw error;
