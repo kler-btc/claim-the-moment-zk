@@ -84,8 +84,9 @@ export async function createTokenPool(
       let txId: string;
       if (typeof poolResponse === 'string') {
         txId = poolResponse;
-      } else if (poolResponse && typeof poolResponse.toString === 'function') {
-        txId = poolResponse.toString();
+      } else if (poolResponse && 'toString' in poolResponse) {
+        // Use 'in' operator to safely check if toString exists
+        txId = String(poolResponse);
       } else {
         // Fallback if we cannot determine the transaction ID
         txId = "unknown-transaction-id";
