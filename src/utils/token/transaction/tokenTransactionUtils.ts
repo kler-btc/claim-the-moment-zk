@@ -15,7 +15,7 @@ export const sendAndConfirmTokenTransaction = async (
     console.log("Instructions:", transaction.instructions.map((ix, i) => 
       `${i}: ${ix.programId.toString().substring(0, 10)}...`).join(', '));
     
-    // Send the transaction with skipPreflight to avoid simulation errors
+    // Send the transaction
     const txid = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: true,
       maxRetries: 5
@@ -24,11 +24,32 @@ export const sendAndConfirmTokenTransaction = async (
     console.log("Transaction sent with ID:", txid);
     console.log("Waiting for confirmation...");
     
-    // Simple confirmation with error handling
-    const status = await connection.confirmTransaction(txid, 'confirmed');
+    // Wait for confirmation with proper timeout handling
+    const confirmed = await Promise.race([
+      connection.confirmTransaction(
+        {
+          signature: txid,
+          blockhash: transaction.recentBlockhash,
+          lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+        },
+        'confirmed'
+      ),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 60000)
+      )
+    ]).catch(error => {
+      console.error('Confirmation error:', error);
+      return { value: { err: 'timeout' } };
+    });
     
-    if (status.value.err) {
-      throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
+    // Type check for confirmation result
+    if (confirmed && 
+        typeof confirmed === 'object' && 
+        'value' in confirmed && 
+        confirmed.value && 
+        typeof confirmed.value === 'object' && 
+        'err' in confirmed.value) {
+      throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmed.value.err)}`);
     }
     
     console.log("Transaction confirmed successfully");

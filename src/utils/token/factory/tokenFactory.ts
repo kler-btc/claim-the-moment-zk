@@ -5,8 +5,7 @@ import {
   Transaction,
   Connection,
   SendTransactionError,
-  SystemProgram,
-  ComputeBudgetProgram
+  SystemProgram
 } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { TokenMetadata, TokenCreationResult, EventDetails } from '../types';
@@ -47,24 +46,7 @@ export const createTokenWithMetadata = async (
     const eventId = `event-${Date.now().toString(16)}-${Math.random().toString(16).substring(2, 8)}`;
     const walletPubkey = new PublicKey(walletAddress);
     
-    // ===== CRITICAL FIX: Calculate rent BEFORE building instructions =====
-    // For Token-2022, we need 3x the base size as default calculation is insufficient
-    const baseSize = 82 + // Base mint account
-                    34 + // Metadata pointer extension
-                    32 + // Fixed metadata header
-                    (metadata.name.length + 4) + // Name with length prefix
-                    (metadata.symbol.length + 4) + // Symbol with length prefix
-                    (metadata.uri.length + 4); // URI with length prefix
-    
-    // Much bigger buffer for Token-2022 metadata - this is crucial
-    const totalSize = Math.max(baseSize * 3, 2048); // At least 2KB
-    
-    // Calculate rent with precise buffer
-    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
-    console.log(`Total size needed for mint: ${totalSize}`);
-    console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 2} lamports...`);
-    
-    // Now build instructions with the correct size information
+    // Get the instructions for the transaction
     const instructions = buildTokenCreationInstructions(
       mint.publicKey, 
       walletPubkey, 
@@ -72,15 +54,10 @@ export const createTokenWithMetadata = async (
       eventDetails.decimals || 0
     );
     
-    // Set higher compute budget 
-    const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-      units: 1_400_000 // Maximum compute units
-    });
-    
-    // Higher priority fee to help with transaction success
-    const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: 100_000 // Higher priority fee
-    });
+    // Calculate rent exemption with precise size
+    const totalSize = instructions.createAccountIx.data.slice(4).readUInt32LE(4); // Extract size from instruction
+    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 2} lamports`);
     
     // Update lamports value in createAccount instruction
     const updatedCreateAccountIx = SystemProgram.createAccount({
@@ -94,8 +71,8 @@ export const createTokenWithMetadata = async (
     // Build transaction with precise instruction ordering
     const tx = new Transaction().add(
       // 1. Set compute budget first
-      computeBudgetIx,
-      priorityFeeIx,
+      instructions.computeBudgetIx,
+      instructions.priorityFeeIx,
       
       // 2. Create system account with correct space
       updatedCreateAccountIx,
@@ -111,7 +88,7 @@ export const createTokenWithMetadata = async (
     );
     
     tx.feePayer = walletPubkey;
-    tx.recentBlockhash = (await connection.getLatestBlockhash('confirmed')).blockhash;
+    tx.recentBlockhash = (await connection.getLatestBlockhash('finalized')).blockhash;
     
     // Sign with mint keypair first (since it's a new account being created)
     tx.partialSign(mint);
@@ -122,34 +99,12 @@ export const createTokenWithMetadata = async (
       
       console.log("Transaction signed by wallet, sending to network...");
       
-      // Send and confirm the transaction with skipPreflight = true
-      const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: true,
-        maxRetries: 3
-      });
-      
-      // Wait for confirmation with proper timeout handling
-      const status = await connection.confirmTransaction(
-        {
-          signature: txid,
-          blockhash: tx.recentBlockhash as string,
-          lastValidBlockHeight: (await connection.getBlockHeight()) + 150
-        },
-        'confirmed'
+      // Send and confirm the transaction
+      const txid = await sendAndConfirmTokenTransaction(
+        connection, 
+        signedTransaction, 
+        walletPubkey
       );
-      
-      // Check for transaction errors - be extra careful with type checking
-      if (status && 
-          typeof status === 'object' && 
-          'value' in status && 
-          status.value && 
-          typeof status.value === 'object' && 
-          'err' in status.value && 
-          status.value.err) {
-        throw new Error(`Transaction confirmed but failed: ${JSON.stringify(status.value.err)}`);
-      }
-      
-      console.log('Transaction confirmed successfully with txid:', txid);
       
       // Store event data
       await saveEventData(
@@ -160,6 +115,8 @@ export const createTokenWithMetadata = async (
         txid
       );
       
+      console.log('Token created successfully with txid:', txid);
+      
       return {
         eventId,
         mintAddress: mint.publicKey.toBase58(),
@@ -168,19 +125,23 @@ export const createTokenWithMetadata = async (
     } catch (error) {
       console.error('Error sending transaction:', error);
       
-      if (error instanceof SendTransactionError && error.logs) {
+      if (error instanceof SendTransactionError) {
         console.error('Transaction error logs:', error.logs);
         
         // Extract specific error information from logs
         let errorMessage = "Transaction failed";
-        const relevantErrorLog = error.logs.find(log => 
-          log.includes('Error') || 
-          log.includes('failed') || 
-          log.includes('InvalidAccountData')
-        );
-        
-        if (relevantErrorLog) {
-          errorMessage = relevantErrorLog;
+        if (error.logs) {
+          // Find the most relevant error message in the logs
+          const relevantErrorLog = error.logs.find(log => 
+            log.includes('Error') || 
+            log.includes('failed') || 
+            log.includes('InvalidAccountData') ||
+            log.includes('Transaction too large')
+          );
+          
+          if (relevantErrorLog) {
+            errorMessage = relevantErrorLog;
+          }
         }
         
         throw new Error(`Token creation failed: ${errorMessage}`);
