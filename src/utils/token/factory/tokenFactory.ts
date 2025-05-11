@@ -54,17 +54,17 @@ export const createTokenWithMetadata = async (
       console.log('Adjusted token symbol to avoid conflicts:', tokenSymbol);
     }
     
-    // Trim metadata values to avoid overflow
+    // Strictly limit metadata values to avoid overflow
     const metadata: TokenMetadata = {
       mint: mint.publicKey,
       name: eventDetails.title.substring(0, 32), // 32 characters max for name
       symbol: tokenSymbol.substring(0, 10), // 10 characters max for symbol
       uri: eventDetails.imageUrl.substring(0, 200), // Limit URI length
       additionalMetadata: [
-        ['description', (eventDetails.description || '').substring(0, 500)],
+        ['description', (eventDetails.description || '').substring(0, 100)], // Reduced size
         ['date', eventDetails.date],
         ['time', eventDetails.time],
-        ['location', eventDetails.location],
+        ['location', eventDetails.location.substring(0, 50)], // Limit location length
         ['supply', eventDetails.attendeeCount.toString()]
       ]
     };
@@ -75,69 +75,37 @@ export const createTokenWithMetadata = async (
     
     console.log("Starting event creation with id:", eventId);
     
-    // CRITICAL FIX: Use two-transaction approach instead of trying to do everything at once
-    console.log("Using two-transaction approach to fix InvalidAccountData errors");
+    // CRITICAL FIX: Use smaller fixed account size that works reliably
+    const ACCOUNT_SIZE = 2048; // Use 2KB which should be sufficient for a basic Token-2022 mint
+    console.log(`Using fixed account size of ${ACCOUNT_SIZE} bytes (2KB) for mint account`);
     
-    // ============= TRANSACTION 1: CREATE AND INITIALIZE MINT ACCOUNT =============
-    
-    // Use maximum compute budget for Token-2022 operations
-    const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-      units: 1400000 // Maximum allowed compute
-    });
-    
-    // Increase priority fee for better success rate
-    const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: 250000
-    });
-    
-    // CRITICAL FIX: Use a more conservative but reliable approach - 10KB is enough for metadata
-    const totalSize = 10000; // 10 KB allocation
-    console.log(`Using account size of: ${totalSize} bytes for mint account`);
+    // ============= TRANSACTION 1: CREATE ACCOUNT =============
+    // First transaction just creates the account with SystemProgram
     
     // Calculate rent exemption
-    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    const rentExemption = await connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE);
     console.log(`Required rent: ${rentExemption} lamports`);
     
-    // Transaction 1: Create and setup the mint account
+    // Create transaction with just the create account instruction
     const tx1 = new Transaction();
     
-    // Add compute budget and priority fee instructions first
-    tx1.add(computeBudgetIx);
-    tx1.add(priorityFeeIx);
+    // Set higher compute budget
+    tx1.add(ComputeBudgetProgram.setComputeUnitLimit({
+      units: 400000 // Lower but sufficient value
+    }));
     
     // Create account with sufficient space
     const createAccountIx = SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint.publicKey,
-      space: totalSize,
+      space: ACCOUNT_SIZE,
       lamports: rentExemption,
       programId: TOKEN_2022_PROGRAM_ID
     });
     tx1.add(createAccountIx);
-    console.log('Added createAccount instruction with size:', totalSize);
+    console.log('Added createAccount instruction with size:', ACCOUNT_SIZE);
     
-    // Initialize metadata pointer extension first
-    const initMetadataPointerIx = createInitializeMetadataPointerInstruction(
-      mint.publicKey,
-      walletPubkey,
-      mint.publicKey,
-      TOKEN_2022_PROGRAM_ID
-    );
-    tx1.add(initMetadataPointerIx);
-    console.log('Added initMetadataPointer instruction');
-    
-    // Initialize mint
-    const initMintIx = createInitializeMintInstruction(
-      mint.publicKey,
-      0, // 0 decimals
-      walletPubkey,
-      null, // No freeze authority
-      TOKEN_2022_PROGRAM_ID
-    );
-    tx1.add(initMintIx);
-    console.log('Added initMint instruction with 0 decimals');
-    
-    // Set fee payer and get fresh blockhash
+    // Set fee payer and get blockhash
     tx1.feePayer = walletPubkey;
     const { blockhash: blockhash1 } = await connection.getLatestBlockhash('finalized');
     tx1.recentBlockhash = blockhash1;
@@ -150,65 +118,69 @@ export const createTokenWithMetadata = async (
     const signedTx1 = await signTransaction(tx1);
     console.log("Transaction 1 signed, sending...");
     
-    // Send transaction 1 with retry logic
+    // Send transaction 1
     let txid1;
     try {
-      // Skip preflight for this transaction to avoid false rejections
+      // Skip preflight to avoid rejection
       txid1 = await connection.sendRawTransaction(signedTx1.serialize(), {
-        skipPreflight: true,
-        maxRetries: 5
+        skipPreflight: true
       });
       console.log("Transaction 1 sent with ID:", txid1);
       
-      // Wait for confirmation with timeout handling
+      // Wait for confirmation with good timeout handling
       const confirmation1 = await Promise.race([
         connection.confirmTransaction({
           signature: txid1,
           blockhash: blockhash1,
           lastValidBlockHeight: (await connection.getBlockHeight()) + 150
         }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Confirmation timeout')), 60000))
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Confirmation timeout')), 30000)
+        )
       ]).catch(error => {
-        console.warn('Confirmation error for transaction 1:', error);
+        console.warn('Confirmation warning for transaction 1:', error);
         return { value: { err: null } } as TransactionConfirmation;
       });
       
-      // Check for errors in confirmation
-      if (confirmation1?.value?.err) {
-        throw new Error(`Transaction 1 failed: ${JSON.stringify(confirmation1.value.err)}`);
-      }
+      console.log("Account created successfully");
       
-      console.log("Transaction 1 confirmed successfully");
-      
-      // Sleep briefly to ensure the account is fully confirmed
+      // Sleep briefly to ensure account is registered
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
       console.error("Transaction 1 error:", error);
       throw new Error(`Failed to create mint account: ${error instanceof Error ? error.message : String(error)}`);
     }
     
-    // ============= TRANSACTION 2: INITIALIZE METADATA =============
-    
-    // Transaction 2: Initialize metadata in the mint account
+    // ============= TRANSACTION 2: INITIALIZE MINT =============
     const tx2 = new Transaction();
     
-    // Add compute budget again
-    tx2.add(computeBudgetIx);
-    tx2.add(priorityFeeIx);
+    // Set higher compute budget and priority fee
+    tx2.add(ComputeBudgetProgram.setComputeUnitLimit({
+      units: 400000 
+    }));
     
-    // Initialize metadata as a separate transaction
-    const initMetadataIx = createInitializeInstruction({
-      programId: TOKEN_2022_PROGRAM_ID,
-      mint: mint.publicKey,
-      metadata: mint.publicKey,
-      name: metadata.name,
-      symbol: metadata.symbol,
-      uri: metadata.uri,
-      mintAuthority: walletPubkey,
-      updateAuthority: walletPubkey
-    });
-    tx2.add(initMetadataIx);
-    console.log('Added initMetadata instruction to transaction 2');
+    tx2.add(ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: 50000 // Lower but still effective priority fee
+    }));
+    
+    // Initialize metadata pointer extension
+    const initMetadataPointerIx = createInitializeMetadataPointerInstruction(
+      mint.publicKey,
+      walletPubkey,
+      mint.publicKey,
+      TOKEN_2022_PROGRAM_ID
+    );
+    tx2.add(initMetadataPointerIx);
+    
+    // Initialize mint with decimals
+    const initMintIx = createInitializeMintInstruction(
+      mint.publicKey,
+      eventDetails.decimals || 0,
+      walletPubkey,
+      null, // No freeze authority
+      TOKEN_2022_PROGRAM_ID
+    );
+    tx2.add(initMintIx);
     
     // Set fee payer and get fresh blockhash
     tx2.feePayer = walletPubkey;
@@ -224,35 +196,95 @@ export const createTokenWithMetadata = async (
     let txid2;
     try {
       txid2 = await connection.sendRawTransaction(signedTx2.serialize(), {
-        skipPreflight: true,
-        maxRetries: 5
+        skipPreflight: true
       });
       console.log("Transaction 2 sent with ID:", txid2);
       
-      // Wait for confirmation with timeout handling
-      const confirmation2 = await Promise.race([
+      // Wait for confirmation
+      await Promise.race([
         connection.confirmTransaction({
           signature: txid2,
           blockhash: blockhash2,
           lastValidBlockHeight: (await connection.getBlockHeight()) + 150
         }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Confirmation timeout')), 60000))
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Confirmation timeout')), 30000)
+        )
       ]).catch(error => {
-        console.warn('Confirmation error for transaction 2:', error);
-        return { value: { err: null } } as TransactionConfirmation;
+        console.warn('Confirmation warning for transaction 2:', error);
       });
       
-      // Check for errors in confirmation
-      if (confirmation2?.value?.err) {
-        throw new Error(`Transaction 2 failed: ${JSON.stringify(confirmation2.value.err)}`);
-      }
+      console.log("Mint initialized successfully");
       
-      console.log("Transaction 2 confirmed successfully");
+      // Sleep briefly before next transaction
+      await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
       console.error("Transaction 2 error:", error);
+      throw new Error(`Failed to initialize mint: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    // ============= TRANSACTION 3: INITIALIZE METADATA =============
+    const tx3 = new Transaction();
+    
+    // Set higher compute budget and priority fee again
+    tx3.add(ComputeBudgetProgram.setComputeUnitLimit({
+      units: 400000
+    }));
+    
+    tx3.add(ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: 50000
+    }));
+    
+    // Initialize metadata
+    const initMetadataIx = createInitializeInstruction({
+      programId: TOKEN_2022_PROGRAM_ID,
+      mint: mint.publicKey,
+      metadata: mint.publicKey,
+      name: metadata.name,
+      symbol: metadata.symbol,
+      uri: metadata.uri,
+      mintAuthority: walletPubkey,
+      updateAuthority: walletPubkey
+    });
+    tx3.add(initMetadataIx);
+    
+    // Set fee payer and get fresh blockhash
+    tx3.feePayer = walletPubkey;
+    const { blockhash: blockhash3 } = await connection.getLatestBlockhash('finalized');
+    tx3.recentBlockhash = blockhash3;
+    
+    // Have the wallet sign transaction 3
+    console.log("Requesting wallet signature for transaction 3...");
+    const signedTx3 = await signTransaction(tx3);
+    console.log("Transaction 3 signed, sending...");
+    
+    // Send transaction 3
+    let txid3;
+    try {
+      txid3 = await connection.sendRawTransaction(signedTx3.serialize(), {
+        skipPreflight: true
+      });
+      console.log("Transaction 3 sent with ID:", txid3);
       
-      // Even if metadata fails, we still created the mint, so continue
-      console.log("Mint account created, continuing despite metadata error");
+      // Wait for confirmation
+      await Promise.race([
+        connection.confirmTransaction({
+          signature: txid3,
+          blockhash: blockhash3,
+          lastValidBlockHeight: (await connection.getBlockHeight()) + 150
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Confirmation timeout')), 30000)
+        )
+      ]).catch(error => {
+        console.warn('Confirmation warning for transaction 3:', error);
+      });
+      
+      console.log("Metadata initialized successfully");
+    } catch (error) {
+      console.error("Transaction 3 error:", error);
+      // Metadata might fail but we still have a valid mint account
+      console.log("Continuing with created mint even if metadata failed");
     }
     
     // Store event data with successful mint

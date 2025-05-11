@@ -18,7 +18,7 @@ import { calculateMetadataSize } from '../tokenMetadataUtils';
 
 /**
  * Builds the transaction instructions for token creation
- * FIXED VERSION: Separate instruction building for two-transaction approach
+ * FIXED VERSION: Using reliable fixed sizes and proper initialization order
  */
 export const buildTokenCreationInstructions = (
   mint: PublicKey,
@@ -26,19 +26,19 @@ export const buildTokenCreationInstructions = (
   metadata: TokenMetadata,
   decimals: number = 0
 ) => {
-  // Set high compute budget for Token-2022 operations
+  // Set compute budget for Token-2022 operations
   const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
-    units: 1400000
+    units: 400000 // Reduced but sufficient
   });
   
-  // Set higher priority fee to improve chances of confirmation
+  // Set priority fee to improve chances of confirmation
   const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 250000
+    microLamports: 50000 // Reduced but still effective
   });
   
-  // Use more conservative size for account creation
-  const accountSize = 10000; // 10 KB allocation
-  console.log(`Using account size of ${accountSize} bytes for Token-2022 mint account`);
+  // Use fixed reliable size
+  const accountSize = 2048; // 2KB allocation
+  console.log(`Using fixed account size of ${accountSize} bytes for Token-2022 mint account`);
   
   // Build instructions with precise ordering
   return {
