@@ -20,3 +20,6 @@ export const createLightSigner = (
     signTransaction: signTransaction
   };
 };
+
+// Define the type that matches what Light Protocol expects
+export type LightSigner = ReturnType<typeof createLightSigner>;

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { transfer } from '@lightprotocol/compressed-token';
 import { eventService, poolService, claimService } from '@/lib/db';
 import { getLightRpc } from '@/utils/compressionApi';
-import { createLightSigner } from './signerAdapter';
+import { createLightSigner, LightSigner } from './signerAdapter';
 
 /**
  * Claims a compressed token for an event.
@@ -68,7 +68,7 @@ export const claimCompressedToken = async (
       const lightRpc = getLightRpc();
       
       // Create Light Protocol compatible signer for the current wallet
-      const recipientSigner = createLightSigner(recipientPubkey, signTransaction);
+      const recipientSigner: LightSigner = createLightSigner(recipientPubkey, signTransaction);
       
       console.log('Preparing transfer transaction with Light Protocol...');
       
@@ -76,7 +76,7 @@ export const claimCompressedToken = async (
       // In browser environments, we use the actual connected wallet
       const transferTxId = await transfer(
         lightRpc,
-        recipientSigner, // Using our light protocol compatible signer
+        recipientSigner as any, // Type assertion needed for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
         recipientPubkey, // From address (must be the connected wallet)

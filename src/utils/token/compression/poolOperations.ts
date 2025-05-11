@@ -11,7 +11,7 @@ import * as bs58 from 'bs58';
 import { createTokenPool as lightCreateTokenPool } from '@lightprotocol/compressed-token';
 import { poolService } from '@/lib/db';
 import { getLightRpc } from '@/utils/compressionApi';
-import { createLightSigner } from './signerAdapter';
+import { createLightSigner, LightSigner } from './signerAdapter';
 
 // Constants for Light Protocol's programs
 const COMPRESSED_TOKEN_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
@@ -43,7 +43,7 @@ export const createTokenPool = async (
     const lightRpc = getLightRpc();
     
     // Create a Light Protocol compatible signer using our adapter
-    const lightSigner = createLightSigner(walletPubkey, signTransaction);
+    const lightSigner: LightSigner = createLightSigner(walletPubkey, signTransaction);
     
     console.log("Created light signer with public key:", lightSigner.publicKey.toString());
     
