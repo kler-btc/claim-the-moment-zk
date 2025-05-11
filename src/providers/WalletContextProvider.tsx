@@ -8,8 +8,8 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 // Only import the wallets you need to avoid conflicts
 import {
   PhantomWalletAdapter,
-  BackpackWalletAdapter,
   SolflareWalletAdapter,
+  TorusWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 
 // Import styles
@@ -31,8 +31,8 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new BackpackWalletAdapter(),
       new SolflareWalletAdapter(),
+      new TorusWalletAdapter(),
       new UnsafeBurnerWalletAdapter(),
     ],
     []
