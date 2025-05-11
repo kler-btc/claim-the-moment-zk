@@ -175,6 +175,13 @@ export const createTokenWithMetadata = async (
         description: "Your transaction is being processed, please wait..."
       });
       
+      // Define type for confirmation result
+      type TransactionConfirmation = {
+        value: {
+          err: any | null;
+        }
+      };
+      
       // Wait for confirmation with proper timeout handling and type checking
       const confirmation = await Promise.race([
         connection.confirmTransaction({
@@ -183,17 +190,19 @@ export const createTokenWithMetadata = async (
           lastValidBlockHeight: (await connection.getBlockHeight()) + 150
         }, 'confirmed'),
         // Add a timeout to avoid hanging
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Confirmation timeout')), 90000))
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Confirmation timeout')), 90000))
       ]).catch(error => {
         console.log('Confirmation timeout or error, will check status later:', error);
         // Even if confirmation times out, the transaction might still succeed
-        return { value: { err: null } } as ConfirmationResult; // Type assertion with our interface
+        return { value: { err: null } } as TransactionConfirmation;
       });
       
-      // Safely check for errors with proper type checking
+      // Improved type checking to fix the TypeScript errors
       if (confirmation && 
-          'value' in confirmation && 
+          typeof confirmation === 'object' && 
+          'value' in confirmation &&
           confirmation.value && 
+          typeof confirmation.value === 'object' &&
           'err' in confirmation.value && 
           confirmation.value.err) {
         throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
