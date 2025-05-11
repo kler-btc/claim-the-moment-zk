@@ -58,3 +58,16 @@ export class LightSignerAdapter {
     }
   }
 }
+
+/**
+ * Create a Light Protocol compatible signer from a wallet
+ */
+export function createLightSigner(
+  publicKey: PublicKey,
+  signTransaction: SignerWalletAdapter['signTransaction']
+): LightSignerAdapter {
+  return new LightSignerAdapter(publicKey.toString(), signTransaction);
+}
+
+// Export the type for better TypeScript support
+export type LightSigner = LightSignerAdapter;

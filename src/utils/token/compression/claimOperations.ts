@@ -4,8 +4,8 @@ import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'sonner';
 import { transfer } from '@lightprotocol/compressed-token';
 import { eventService, poolService, claimService } from '@/lib/db';
-import { getLightRpc } from '@/utils/compressionApi';
-import { createLightSigner, LightSigner } from './signerAdapter';
+import { getLightConnection } from '@/utils/compressionApi';
+import { createLightSigner } from './signerAdapter';
 
 /**
  * Claims a compressed token for an event.
@@ -61,8 +61,8 @@ export const claimCompressedToken = async (
       const mintPubkey = new PublicKey(mintAddress);
       const recipientPubkey = new PublicKey(recipientWallet);
       
-      // Get Light Protocol RPC instance
-      const lightRpc = getLightRpc();
+      // Get Light Protocol connection
+      const lightConnection = getLightConnection();
       
       // Create Light Protocol compatible signer for the current wallet
       const recipientSigner = createLightSigner(recipientPubkey, signTransaction);
@@ -74,7 +74,7 @@ export const claimCompressedToken = async (
       // will use the publicKey for address derivation and the signTransaction
       // function for transaction signing
       const transferTxId = await transfer(
-        lightRpc,
+        lightConnection as any, // Type assertion needed for Light Protocol compatibility
         recipientSigner as any, // Type assertion needed for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token

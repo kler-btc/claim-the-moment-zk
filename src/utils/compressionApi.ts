@@ -25,7 +25,6 @@ export const getSolanaConnection = (): Connection => {
   console.log(`Creating connection to ${NETWORK} via ${RPC_URL}`);
   
   // Create connection with proper configuration for browser
-  // FIXED: Removed preflightCommitment which isn't in ConnectionConfig type
   return new Connection(RPC_URL, {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000,
@@ -40,6 +39,14 @@ export const getLightConnection = (): Connection => {
   console.log('Creating Light Protocol connection');
   
   return getSolanaConnection();
+};
+
+/**
+ * Get a Light Protocol RPC connection
+ * This is for compatibility with Light Protocol SDK which might expect a different connection type
+ */
+export const getLightRpc = (): Connection => {
+  return getLightConnection();
 };
 
 /**
@@ -79,6 +86,20 @@ export const sendAndConfirmTransaction = async (
     
     throw error;
   }
+};
+
+/**
+ * Verify if a user has claimed a token for an event
+ */
+export const verifyTokenClaim = async (
+  eventId: string,
+  walletAddress: string
+): Promise<boolean> => {
+  // Import claimService from db to avoid circular imports
+  const { claimService } = await import('@/lib/db');
+  
+  // Check if this wallet has claimed a token for this event
+  return await claimService.hasWalletClaimedEvent(eventId, walletAddress);
 };
 
 // Export for convenience
