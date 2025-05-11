@@ -78,8 +78,8 @@ export const claimCompressedToken = async (
         recipientSigner as any, // Type assertion needed for Light Protocol compatibility
         mintPubkey,
         1, // Transfer 1 token
-        recipientPubkey, // From address 
-        recipientPubkey  // To address (same as from in this case - self-claim)
+        recipientSigner.publicKey, // From address - use signer's publicKey
+        recipientSigner.publicKey  // To address - use signer's publicKey 
       );
       
       console.log('Transfer transaction sent with ID:', transferTxId);
