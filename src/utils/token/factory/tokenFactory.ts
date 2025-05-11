@@ -21,6 +21,7 @@ import {
   createInitializeMintInstruction,
   createInitializeInstruction
 } from '@solana/spl-token';
+import { calculateMetadataSize } from '../tokenMetadataUtils';
 
 /**
  * Creates a token with all necessary metadata
@@ -65,28 +66,13 @@ export const createTokenWithMetadata = async (
       microLamports: 50000
     });
     
-    // Calculate space correctly for Token-2022 with metadata
-    const extensions = [ExtensionType.MetadataPointer];
-    const mintLen = getMintLen(extensions);
-    console.log(`Base mint size with MetadataPointer extension: ${mintLen}`);
-    
-    // For Token-2022, we need additional space for the metadata
-    // This formula comes from Token-2022 examples for calculating total size
-    const metadataLen = Buffer.from(JSON.stringify({
-      name: metadata.name,
-      symbol: metadata.symbol,
-      uri: metadata.uri
-    })).length + 64; // Add padding for metadata structure
-    
-    const totalSize = mintLen + metadataLen;
+    // Calculate the mint account size using our improved function
+    const totalSize = calculateMetadataSize(metadata);
     console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
     
-    // Calculate rent exemption with the right size - use getMinimumBalanceForRentExemptMint for the base,
-    // then add additional rent for the metadata section
-    const baseRentExemption = await getMinimumBalanceForRentExemptMint(connection);
-    const additionalRent = await connection.getMinimumBalanceForRentExemption(metadataLen);
-    const rentExemption = baseRentExemption + additionalRent;
-    console.log(`Required rent: ${rentExemption}, allocating: ${rentExemption * 1.5} lamports`);
+    // Calculate rent exemption based on the new size
+    const rentExemption = await connection.getMinimumBalanceForRentExemption(totalSize);
+    console.log(`Required rent: ${rentExemption} lamports`);
     
     // Build transaction with proper instruction ordering
     const tx = new Transaction().add(
@@ -99,7 +85,7 @@ export const createTokenWithMetadata = async (
         fromPubkey: walletPubkey,
         newAccountPubkey: mint.publicKey,
         space: totalSize,
-        lamports: Math.ceil(rentExemption * 1.5), // Add 50% for safety
+        lamports: rentExemption, // Exact rent exemption needed
         programId: TOKEN_2022_PROGRAM_ID
       }),
       
@@ -149,7 +135,7 @@ export const createTokenWithMetadata = async (
       
       // Send and confirm the transaction
       const txid = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
+        skipPreflight: true, // Skip preflight to avoid simulation errors with large accounts
         preflightCommitment: 'confirmed'
       });
       

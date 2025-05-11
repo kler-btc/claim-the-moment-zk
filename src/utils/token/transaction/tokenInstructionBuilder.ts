@@ -35,14 +35,9 @@ export const buildTokenCreationInstructions = (
     microLamports: 50000
   });
   
-  // Calculate space correctly for Token-2022 with metadata
-  const extensions = [ExtensionType.MetadataPointer];
-  const baseMintLen = getMintLen(extensions);
-  console.log(`Base mint size with MetadataPointer extension: ${baseMintLen}`);
-  
-  // Calculate total size needed with padding
+  // Calculate space correctly using our updated function
   const totalSize = calculateMetadataSize(metadata);
-  console.log(`Total calculated size needed for mint+metadata: ${totalSize}`);
+  console.log(`Total calculated size for mint+metadata: ${totalSize}`);
   
   // Build instructions with precise instruction ordering
   return {
