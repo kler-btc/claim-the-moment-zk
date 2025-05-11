@@ -18,7 +18,7 @@ import { calculateMetadataSize } from '../tokenMetadataUtils';
 
 /**
  * Builds the transaction instructions for token creation
- * FIXED VERSION: Uses much higher fixed size and compute budget
+ * FIXED VERSION: Separate instruction building for two-transaction approach
  */
 export const buildTokenCreationInstructions = (
   mint: PublicKey,
@@ -26,30 +26,29 @@ export const buildTokenCreationInstructions = (
   metadata: TokenMetadata,
   decimals: number = 0
 ) => {
-  // CRITICAL: Set higher compute budget for Token-2022 operations
-  // 1.4M units is the maximum allowed compute limit
+  // Set high compute budget for Token-2022 operations
   const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
     units: 1400000
   });
   
   // Set higher priority fee to improve chances of confirmation
   const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: 250000 // Increased to ensure priority processing
+    microLamports: 250000
   });
   
-  // Use our fixed large size to avoid InvalidAccountData errors
-  const totalSize = 120000; // Using consistent 120 KB allocation
-  console.log(`Using fixed account size of ${totalSize} bytes for Token-2022 mint+metadata`);
+  // Use more conservative size for account creation
+  const accountSize = 10000; // 10 KB allocation
+  console.log(`Using account size of ${accountSize} bytes for Token-2022 mint account`);
   
-  // Build instructions with precise instruction ordering
+  // Build instructions with precise ordering
   return {
     computeBudgetIx,
     priorityFeeIx,
     createAccountIx: SystemProgram.createAccount({
       fromPubkey: walletPubkey,
       newAccountPubkey: mint,
-      space: totalSize, // Using fixed large size
-      lamports: 0, // This will be updated with the actual rent exemption
+      space: accountSize,
+      lamports: 0, // Will be updated with actual rent exemption
       programId: TOKEN_2022_PROGRAM_ID
     }),
     initMetadataPointerIx: createInitializeMetadataPointerInstruction(
@@ -65,6 +64,7 @@ export const buildTokenCreationInstructions = (
       null, // No freeze authority
       TOKEN_2022_PROGRAM_ID
     ),
+    // This will be used in a separate transaction
     initMetadataIx: createInitializeInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
       mint: mint,
