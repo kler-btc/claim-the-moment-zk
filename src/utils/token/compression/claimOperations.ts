@@ -61,25 +61,27 @@ export const claimCompressedToken = async (
       const mintPubkey = new PublicKey(mintAddress);
       const recipientPubkey = new PublicKey(recipientWallet);
       
-      // CRITICAL: For browser implementation, the signer must be the wallet itself
-      // We don't need the creator wallet since the caller must be the owner
-      
       // Get Light Protocol RPC instance
       const lightRpc = getLightRpc();
       
       // Create Light Protocol compatible signer for the current wallet
-      const recipientSigner: BrowserSigner = createLightSigner(recipientPubkey, signTransaction);
+      const recipientSigner = createLightSigner(recipientPubkey, signTransaction);
       
       console.log('Preparing transfer transaction with Light Protocol...');
       
-      // Call Light Protocol's transfer function with browser-compatible pattern
-      // In browser environments, we use the actual connected wallet
+      // Following the Light Protocol pattern in browser environments:
+      // In browser context, we use a Keypair-like object where Light Protocol
+      // will only use the publicKey for address derivation and the signTransaction
+      // function for transaction signing - never accessing the secretKey
       const transferTxId = await transfer(
         lightRpc,
-        recipientSigner as any, // Type assertion needed for Light Protocol compatibility
+        {
+          publicKey: recipientPubkey,
+          signTransaction  // Pass the signTransaction function directly
+        },
         mintPubkey,
         1, // Transfer 1 token
-        recipientSigner.publicKey, // From address (must match recipientSigner's public key)
+        recipientPubkey, // From address 
         recipientPubkey  // To address (same as from in this case - self-claim)
       );
       

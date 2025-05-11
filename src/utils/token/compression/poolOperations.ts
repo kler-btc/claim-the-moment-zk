@@ -42,17 +42,16 @@ export const createTokenPool = async (
     // Get Light Protocol RPC instance
     const lightRpc = getLightRpc();
     
-    // Create a Light Protocol compatible signer using our adapter
-    const lightSigner: BrowserSigner = createLightSigner(walletPubkey, signTransaction);
-    
-    console.log("Created light signer with public key:", lightSigner.publicKey.toString());
+    console.log("Creating token pool with wallet public key:", walletPubkey.toString());
     
     // Use Light Protocol's createTokenPool function with Token-2022 program ID
-    // Note the type assertion is necessary because our signer doesn't have a real secretKey
-    // but Light Protocol doesn't actually use it in browser environments
+    // In browser environments, Light Protocol only needs the publicKey and signTransaction
     const txId = await lightCreateTokenPool(
       lightRpc,
-      lightSigner as any, // Type assertion for Light Protocol compatibility
+      {
+        publicKey: walletPubkey,
+        signTransaction
+      },
       mintPubkey,
       undefined, // Optional fee payer (undefined = use signer)
       TOKEN_2022_PROGRAM_ID // Using Token-2022 program
