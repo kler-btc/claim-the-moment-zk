@@ -25,7 +25,7 @@ interface WalletContextProviderProps {
 export const WalletContextProvider: FC<WalletContextProviderProps> = ({ 
   children,
   network = WalletAdapterNetwork.Devnet,
-  endpoint = 'https://devnet.helius-rpc.com/?api-key=4c484c87-40c1-4b40-9b2c-1e7f8b1f8b1f'
+  endpoint = 'https://devnet.helius-rpc.com/?api-key=9aeaaaaa-ac88-42a4-8f49-7b0c23cee762'
 }) => {
   // Use memo to prevent unnecessary re-renders
   const wallets = useMemo(
@@ -40,7 +40,7 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

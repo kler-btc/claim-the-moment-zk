@@ -12,6 +12,7 @@ import EventDashboardPage from '@/pages/EventDashboardPage';
 import ClaimDashboardPage from '@/pages/ClaimDashboardPage';
 import NotFound from '@/pages/NotFound';
 import { createQueryClient } from '@/lib/query-client';
+import Index from '@/pages/Index';
 
 // Create a client using our utility function
 const queryClient = createQueryClient();
@@ -24,6 +25,7 @@ function App() {
           <Routes>
             <Route element={<PageLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/home" element={<HomePage />} />
               <Route path="/create" element={<CreateEventPage />} />
               <Route path="/claim" element={<ClaimPage />} />
               <Route path="/claim/:eventId" element={<ClaimPage />} />
