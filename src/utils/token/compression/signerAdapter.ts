@@ -1,5 +1,5 @@
 
-import { PublicKey, Signer, Transaction } from '@solana/web3.js';
+import { PublicKey, Signer, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { SignerWalletAdapter } from '@solana/wallet-adapter-base';
 
 /**
@@ -15,23 +15,36 @@ export const createLightSigner = (
 ): LightSigner => {
   return {
     publicKey: walletPubkey,
-    signTransaction: async (transaction: Transaction) => {
+    signTransaction: async (transaction: Transaction | VersionedTransaction) => {
       try {
-        // Add transaction inspection before signing
-        console.log("Transaction to sign:", {
-          feePayer: transaction.feePayer?.toBase58(),
-          recentBlockhash: transaction.recentBlockhash || 'none',
-          instructions: transaction.instructions.length
-        });
+        // Add transaction inspection before signing with proper type checking
+        if (transaction instanceof Transaction) {
+          console.log("Transaction to sign:", {
+            feePayer: transaction.feePayer?.toBase58(),
+            recentBlockhash: transaction.recentBlockhash || 'none',
+            instructions: transaction.instructions.length
+          });
+        } else if (transaction instanceof VersionedTransaction) {
+          console.log("VersionedTransaction to sign:", {
+            version: transaction.version,
+            signatures: transaction.signatures.length
+          });
+        } else {
+          console.log("Unknown transaction type to sign");
+        }
         
         // Let the wallet sign the transaction
         const signedTx = await signTransaction(transaction);
         
-        // Verify the signatures after wallet signing
-        if (!transaction.verifySignatures()) {
-          console.warn("Transaction signature verification failed after wallet signing");
+        // Verify the signatures after wallet signing for regular transactions
+        if (transaction instanceof Transaction) {
+          if (!transaction.verifySignatures()) {
+            console.warn("Transaction signature verification failed after wallet signing");
+          } else {
+            console.log("Transaction signatures verified successfully");
+          }
         } else {
-          console.log("Transaction signatures verified successfully");
+          console.log("Skipping verification for VersionedTransaction");
         }
         
         return signedTx;
@@ -49,7 +62,7 @@ export const createLightSigner = (
 export interface LightSigner {
   publicKey: PublicKey;
   secretKey: Uint8Array; // Required by @solana/web3.js Signer type
-  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+  signTransaction: (transaction: Transaction | VersionedTransaction) => Promise<Transaction | VersionedTransaction>;
 }
 
 // Ensure our LightSigner satisfies the Signer interface

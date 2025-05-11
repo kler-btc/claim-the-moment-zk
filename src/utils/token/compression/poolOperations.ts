@@ -52,7 +52,13 @@ export const createTokenPool = async (
     // Create Light Protocol compatible signer with enhanced error catching
     const lightSigner = createLightSigner(walletPubkey, async (transaction) => {
       try {
-        console.log("About to sign transaction with", transaction.instructions?.length || "unknown", "instructions");
+        // Type-safe logging of transaction details
+        if (transaction instanceof Transaction) {
+          console.log("About to sign Transaction with", transaction.instructions?.length || 0, "instructions");
+        } else if (transaction instanceof VersionedTransaction) {
+          console.log("About to sign VersionedTransaction");
+        }
+        
         // Add custom signing logic with detailed logs
         const signedTx = await signTransaction(transaction);
         console.log("Transaction signed successfully by wallet");
