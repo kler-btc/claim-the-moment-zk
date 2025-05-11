@@ -22,24 +22,46 @@ export const createLightSigner = (
           console.log("Transaction to sign:", {
             feePayer: transaction.feePayer?.toBase58(),
             recentBlockhash: transaction.recentBlockhash || 'none',
-            instructions: transaction.instructions.length
+            instructions: transaction.instructions.length,
+            signerPubkey: walletPubkey.toBase58()
           });
+          
+          // CRITICAL FIX: Pre-sign with offline workflow to ensure proper signing
+          // This helps Light Protocol verify signatures correctly
+          console.log("Ensuring transaction is ready for signing with proper fee payer");
+          if (!transaction.feePayer) {
+            transaction.feePayer = walletPubkey;
+          }
+          
+          if (!transaction.recentBlockhash) {
+            console.warn("Transaction is missing recentBlockhash - Light Protocol may reject it");
+          }
         } else if (transaction instanceof VersionedTransaction) {
           console.log("VersionedTransaction to sign:", {
             version: transaction.version,
-            signatures: transaction.signatures.length
+            signatures: transaction.signatures.length,
+            signerPubkey: walletPubkey.toBase58()
           });
         } else {
           console.log("Unknown transaction type to sign");
         }
         
         // Let the wallet sign the transaction
+        console.log("Passing transaction to wallet for signing...");
         const signedTx = await signTransaction(transaction);
+        console.log("Transaction signed successfully by wallet");
         
         // Verify the signatures after wallet signing for regular transactions
         if (transaction instanceof Transaction) {
           if (!transaction.verifySignatures()) {
             console.warn("Transaction signature verification failed after wallet signing");
+            // Additional diagnostic info
+            console.error("Transaction signature details:", {
+              signatures: transaction.signatures.map(s => ({
+                pubkey: s.publicKey.toBase58(),
+                signature: s.signature ? "present" : "missing"
+              }))
+            });
           } else {
             console.log("Transaction signatures verified successfully");
           }

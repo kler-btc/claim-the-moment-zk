@@ -16,7 +16,7 @@ export const LIGHT_PROTOCOL_PROVER_ENDPOINT = HELIUS_RPC_URL;
 
 // Create a standard Solana connection with confirmed commitment
 export const getSolanaConnection = (): Connection => {
-  // Use finalized commitment for more reliable results
+  // Use confirmed commitment for more reliable results
   return new Connection(HELIUS_RPC_URL, 'confirmed');
 };
 
@@ -40,9 +40,11 @@ export const getLightRpc = () => {
       LIGHT_PROTOCOL_PROVER_ENDPOINT,
       {
         commitment: 'confirmed', // Use confirmed commitment for better reliability
-        wsEndpoint: HELIUS_RPC_URL.replace('https://', 'wss://'), // Provide WebSocket endpoint
         confirmTransactionInitialTimeout: 60000, // 60 seconds timeout for confirmations
         disableRetryOnRateLimit: false, // Enable retry on rate limit
+        
+        // CRITICAL FIX: Add preflight commitment level
+        preflightCommitment: 'processed', // Use processed for faster preflight checks
       }
     );
     
