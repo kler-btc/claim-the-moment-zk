@@ -24,6 +24,13 @@ import {
 import { calculateMetadataSize } from '../tokenMetadataUtils';
 import { toast } from 'sonner';
 
+// Define the confirmation result type to safely access err property
+interface ConfirmationResult {
+  value: {
+    err: any | null;
+  };
+}
+
 /**
  * Creates a token with all necessary metadata
  */
@@ -168,7 +175,7 @@ export const createTokenWithMetadata = async (
         description: "Your transaction is being processed, please wait..."
       });
       
-      // Wait for confirmation with proper timeout handling
+      // Wait for confirmation with proper timeout handling and type checking
       const confirmation = await Promise.race([
         connection.confirmTransaction({
           signature: txid,
@@ -180,10 +187,15 @@ export const createTokenWithMetadata = async (
       ]).catch(error => {
         console.log('Confirmation timeout or error, will check status later:', error);
         // Even if confirmation times out, the transaction might still succeed
-        return { value: { err: null } }; // Continue as if successful
+        return { value: { err: null } } as ConfirmationResult; // Type assertion with our interface
       });
       
-      if (confirmation && 'value' in confirmation && confirmation.value && confirmation.value.err) {
+      // Safely check for errors with proper type checking
+      if (confirmation && 
+          'value' in confirmation && 
+          confirmation.value && 
+          'err' in confirmation.value && 
+          confirmation.value.err) {
         throw new Error(`Transaction confirmed but failed: ${JSON.stringify(confirmation.value.err)}`);
       }
       
