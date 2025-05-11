@@ -14,6 +14,8 @@ export const createLightSigner = (
   signTransaction: SignerWalletAdapter['signTransaction']
 ) => {
   // Create a browser-compatible signer that Light Protocol functions can use
+  // The key here is that Light Protocol checks for publicKey and secretKey properties
+  // but in browser environments only uses the publicKey and the signTransaction method
   return {
     publicKey: walletPubkey,
     secretKey: new Uint8Array(64), // Dummy secretKey (not used in browser context)
@@ -23,3 +25,10 @@ export const createLightSigner = (
 
 // Define the type that matches what Light Protocol expects
 export type LightSigner = ReturnType<typeof createLightSigner>;
+
+// For explicit compatibility with @solana/web3.js Signer interface
+export interface BrowserSigner {
+  publicKey: PublicKey;
+  secretKey: Uint8Array;
+  signTransaction: SignerWalletAdapter['signTransaction'];
+}

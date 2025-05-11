@@ -34,7 +34,7 @@ export const useTokenClaiming = (eventId: string | undefined) => {
   }, [connected, publicKey, eventId]);
 
   const handleClaimToken = async () => {
-    if (!connected || !publicKey || !eventId) {
+    if (!connected || !publicKey || !eventId || !signTransaction) {
       toast.error("Unable to Claim", {
         description: "Please connect your wallet first."
       });
