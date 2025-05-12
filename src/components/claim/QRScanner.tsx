@@ -52,7 +52,8 @@ const QRScanner = ({
   };
 
   const handleScanError = (error: any) => {
-    setScanError(`Scan error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error("QR scan error:", error);
+    setScanError(error?.message || "Scanner error");
     onError(error);
   };
 
@@ -62,6 +63,13 @@ const QRScanner = ({
       console.log("QR scan data received:", data);
       onScan(data);
     }
+  };
+
+  // Define proper video constraints to fix "No constraints provided" error
+  const videoConstraints = {
+    facingMode: 'environment',
+    width: { min: 360, ideal: 720, max: 1280 },
+    height: { min: 240, ideal: 720, max: 720 }
   };
 
   return (
@@ -80,11 +88,7 @@ const QRScanner = ({
               onError={handleScanError}
               onScan={handleScan}
               style={{ width: '100%' }}
-              constraints={{ 
-                facingMode: 'environment',
-                width: { min: 640, ideal: 1280, max: 1920 },
-                height: { min: 480, ideal: 720, max: 1080 }
-              }}
+              constraints={videoConstraints}
               className="absolute inset-0"
             />
             {scanError && (

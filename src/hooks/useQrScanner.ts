@@ -50,14 +50,16 @@ export const useQrScanner = () => {
     console.error('QR scan error:', error);
     
     // Keep more user-friendly error messages
-    if (error.name === 'NotFoundError') {
+    if (error?.name === 'NotFoundError') {
       setScanError('Camera not found or not accessible.');
-    } else if (error.name === 'NotAllowedError') {
+    } else if (error?.name === 'NotAllowedError') {
       setScanError('Camera access denied. Please check your browser settings.');
-    } else if (error.name === 'NotReadableError') {
+    } else if (error?.name === 'NotReadableError') {
       setScanError('Camera is already in use by another application.');
+    } else if (error?.message?.includes('constraints')) {
+      setScanError('Camera configuration issue. Try using manual entry instead.');
     } else {
-      setScanError(`Scanner error: ${error.message || 'Unknown error'}`);
+      setScanError(`Scanner error: ${error?.message || 'Unknown error'}`);
     }
   };
 
@@ -71,6 +73,10 @@ export const useQrScanner = () => {
 
   const toggleManualEntryMode = () => {
     setManualEntryMode(!manualEntryMode);
+    setScanError(null);
+    if (isScanning) {
+      setIsScanning(false);
+    }
   };
 
   const startScanning = () => {

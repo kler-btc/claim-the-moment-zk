@@ -35,7 +35,9 @@ const ClaimTokenCard = ({
       <CardHeader>
         <CardTitle>Claim Your Token</CardTitle>
         <CardDescription>
-          Connect your wallet and claim your event token
+          {walletConnected 
+            ? "Click below to claim your event token" 
+            : "Connect your wallet and claim your event token"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -85,11 +87,14 @@ const ClaimTokenCard = ({
           onClick={onClaimToken}
           className="solana-gradient-bg w-full"
           disabled={isClaiming || !walletConnected || hasClaimed === true}
+          title={!walletConnected ? "Please connect your wallet first" : ""}
         >
           {isClaiming ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Claiming...</>
           ) : hasClaimed ? (
             <><Check className="mr-2 h-4 w-4" /> Token Claimed</>
+          ) : !walletConnected ? (
+            "Connect Wallet to Claim"
           ) : (
             "Claim Token"
           )}

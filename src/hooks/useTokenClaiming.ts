@@ -35,6 +35,15 @@ export const useTokenClaiming = (eventId: string | undefined) => {
 
   const handleClaimToken = async () => {
     if (!connected || !publicKey || !eventId || !signTransaction) {
+      // If wallet is not connected, show the wallet modal instead of an error
+      if (!connected) {
+        const walletButton = document.querySelector('.wallet-button .wallet-adapter-button');
+        if (walletButton instanceof HTMLElement) {
+          walletButton.click();
+          return;
+        }
+      }
+      
       toast.error("Unable to Claim", {
         description: "Please connect your wallet first."
       });
