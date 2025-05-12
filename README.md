@@ -29,15 +29,6 @@ cPOP (Compressed Proof of Participation) is a Solana-based application that allo
 - **API Services**: Helius for enhanced Solana RPC access
 - **QR Technology**: QR code generation and scanning functionality
 
-## Development
-
-This project is built with [Lovable](https://lovable.dev/). You can edit this project by:
-
-### Using Lovable (Recommended)
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/c9628337-77fd-4ac5-b56b-edaa3e3e3e35) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
 
 ### Using your preferred IDE
 
@@ -57,14 +48,7 @@ npm i
 npm run dev
 ```
 
-## Deployment
-
-To deploy the project, simply open [Lovable](https://lovable.dev/projects/c9628337-77fd-4ac5-b56b-edaa3e3e3e35) and click on Share -> Publish.
-
-## Custom Domain
-
-You can connect a custom domain to your project through the Lovable interface. Navigate to Project > Settings > Domains and click Connect Domain.
 
 ## Credits
 
-Built with Solana ZK Compression & Lovable
+Built with Solana ZK Compression & Light protocol
